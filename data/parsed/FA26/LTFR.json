@@ -1,6 +1,51 @@
 [
  {
   "subject": "LTFR",
+  "number": "2A",
+  "title": "Intermediate French I",
+  "units": "4.00",
+  "restriction": "",
+  "sections": [
+   {
+    "section_id": "154992",
+    "group": "A",
+    "type": "LE",
+    "code": "A00",
+    "days": "MWF",
+    "time_start": "9:00a",
+    "time_end": "9:50a",
+    "building": "Mandeville Center",
+    "room": "127",
+    "instructor": "",
+    "avail": 28,
+    "limit": 28,
+    "waitlist": 0,
+    "enrollable": 1,
+    "cancelled": false,
+    "note": ""
+   },
+   {
+    "section_id": "",
+    "group": "A",
+    "type": "FI",
+    "code": "12/09/2026",
+    "days": "",
+    "time_start": "8:00a",
+    "time_end": "10:59a",
+    "building": "",
+    "room": "",
+    "instructor": "",
+    "avail": null,
+    "limit": null,
+    "waitlist": 0,
+    "enrollable": 0,
+    "cancelled": 0,
+    "note": ""
+   }
+  ]
+ },
+ {
+  "subject": "LTFR",
   "number": "104",
   "title": "Advanced French Reading and Writing",
   "units": "4.00",
@@ -17,8 +62,8 @@
     "building": "Ridgewalk Academic Complex",
     "room": "0372",
     "instructor": "Oumelbanine Zhiri",
-    "avail": "15",
-    "limit": "15",
+    "avail": 15,
+    "limit": 15,
     "waitlist": 0,
     "enrollable": 1,
     "cancelled": false,
