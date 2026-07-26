@@ -1,5 +1,47 @@
 # Progress Log
 
+## 2026-07-25 — TSS dropped `EventKey`; the importer defaulted instead of failing
+A FA26 refresh pulled at 4:31 PM produced an export that looked fine and was
+badly wrong. TSS no longer sends the top-level `EventKey` field the importer
+grouped lectures on — **0 of 20,944 events carried it**. `e.get("EventKey",
+"001")` returned the default for every one, so every lecture group in every
+course merged into a single "A" group:
+- **MATH 20C**: four lectures all coded `A00`; its 26 discussions re-sequenced
+  `A01`–`A26` with no lecture to hang off (correct: `A00`–`A06`, `B00`–`B08`,
+  `C00`–`C06`, `D00`–`D06`).
+- **ANTH 295**: `A81`–`V81` became `A81`–`A102`.
+- **Finals**: one per course instead of one per group — 143 FI rows lost.
+- **~3,400 of 7,956 sections changed code.** Section code is part of the
+  natural key that carries section ids forward, so shipping this would have
+  emptied the saved schedule of anyone holding one — the same damage as the
+  2026-07-23 renumbering, arriving by a different door. The export was caught
+  and held before it reached TritonPlan.
+
+Why nothing caught it: `refresh-catalog.mjs` and `deploy.sh` both guard against
+the *same* natural key getting a *different* id. Here the key itself changed, so
+both gates read it as "3,400 sections retired, 3,300 new" and passed.
+
+Fixes (`tss/import_fa26.py`):
+- `group_key()` reads the lecture group off `EventAbbr`
+  (`"<lecture>-<subsection>-<method>"`, e.g. `002-003-DI` → `002`), present on
+  20,944/20,944 events, and falls back to `EventKey` if it ever returns.
+- **No default.** An event that can't be placed returns `None`, and the import
+  aborts before writing anything rather than emitting a plausible single-group
+  catalog. A missing field is now a stop, not a shrug.
+- `detect_placeholder_instructors()` had the *same* `EventKey` read as part of
+  its "same lecture group of the same course" test — with the field gone that
+  test silently widened to "same course". It flagged the same 19 names either
+  way on this dump, so nothing shipped wrong, but it was luck; it now uses
+  `group_key()` too.
+- `tss/test_import_fa26.py` (new, offline/synthetic): asserts two lectures stay
+  two groups with a final each, that `group_key` survives the field rename, and
+  that an ungroupable dump exits non-zero.
+
+Re-imported from the same 4:31 PM dump: section codes now match the live
+catalog exactly (MATH 20C, ANTH 295, BILD 1, CSE 101 verified identical), and
+churn against live is **29 dropped / 44 added out of 7,956** — ordinary
+two-day movement, down from 3,412/3,299.
+
 ## 2026-07-23 — Calendar block render overhaul (ported from TritonPlan)
 Sahir asked for the block formatting fix to be pushed here too. Same change
 as tritonplan.com's emulator (kept 1:1 — port future calendar edits both ways):
