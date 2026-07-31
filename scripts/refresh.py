@@ -167,7 +167,7 @@ def main():
     print(f"\nCatalog after refresh: {after} courses ({after - before:+d}).")
 
     # 4. stamp the refresh date
-    today = datetime.date.today().strftime("%B %-d, %Y")
+    today = datetime.datetime.now().strftime("%B %-d, %Y at %-I:%M %p PT")
     STAMP.write_text(today + "\n")
     print(f"Stamped data/refreshed_at.txt = {today}")
 

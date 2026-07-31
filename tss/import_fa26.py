@@ -18,7 +18,11 @@ TSS data model (SAP SLcM, service yucsd_con_module):
 
 WebReg mapping:
   course  = module (subject+number from CourseAbbr like "CSE-003").
-  group   = lecture number (EventKey "001" -> letter A, "002" -> B).
+  group   = lecture number ("001" -> letter A, "002" -> B), read off EventAbbr
+            ("<lecture>-<subsection>-<method>", e.g. "002-003-DI"). TSS also
+            used to publish this as a top-level EventKey; that field vanished
+            from the payload between the 2026-07-23 and 2026-07-25 pulls.
+            See group_key() — a missing key is now fatal, not a default.
   rows    = deduped meetings under that group: lecture "A00", then each
             enrollable package as a sub-row "A01", "A02"… (the row that carries
             the Enroll button + seats), plus a final-exam FI row.
@@ -185,7 +189,14 @@ def detect_placeholder_instructors(events, mod_by_id):
             if a is None or b is None or not mt["days"]:
                 continue
             days = frozenset(re.findall(r"Su|Sa|Tu|Th|M|W|F", mt["days"]))
-            slots[name].append((abbr, e.get("EventKey"), days, a, b))
+            # group_key, not the raw EventKey field. This is the same 2026-07-25
+            # hazard as in main(): with EventKey gone every event answered None,
+            # so the "same lecture group of the same course" test below widened
+            # to "same course" and two different lectures at the same hour
+            # stopped counting as a conflict. On the 2026-07-25 dump it happened
+            # to flag the same 19 names either way, so nothing shipped wrong —
+            # but it was luck, not logic, and the next dump need not be as kind.
+            slots[name].append((abbr, group_key(e), days, a, b))
 
     flagged = set()
     for name, ss in slots.items():
@@ -206,6 +217,33 @@ def detect_placeholder_instructors(events, mod_by_id):
     return flagged
 
 
+def group_key(e):
+    """Which lecture group this meeting belongs to — "001", "002", …
+
+    Returns None when the event carries no usable grouping information.
+
+    WHY THIS IS ITS OWN FUNCTION, AND WHY None MATTERS. This used to be
+    `e.get("EventKey", "001")` inline. On 2026-07-25 TSS stopped sending
+    EventKey at all, so every event in every course silently fell into the one
+    default group: MATH 20C's four lectures all became "A00", its 26
+    discussions were re-sequenced A01–A26 with no lecture to hang off, and only
+    one final exam survived per course instead of one per group. ~3,400
+    sections changed code. Nothing failed, nothing warned — the import printed
+    its usual success line and the export looked structurally fine.
+
+    A default value turned a schema change into corrupt data. So there is no
+    default any more: an event we cannot place is returned as None and main()
+    refuses to write anything.
+    """
+    # "<lecture>-<subsection>-<method>", e.g. "002-003-DI" -> "002".
+    parts = (e.get("EventAbbr") or "").split("-")
+    if len(parts) == 3 and parts[0].strip():
+        return parts[0].strip()
+    # Older dumps carried it as a top-level field; keep reading it if it's back.
+    key = (e.get("EventKey") or "").strip()
+    return key or None
+
+
 def main():
     modules = json.load(open(SRC / "modules.json"))
     events = json.load(open(SRC / "events.json"))
@@ -215,6 +253,23 @@ def main():
     ev_by_mod = defaultdict(list)
     for e in events:
         ev_by_mod[e["ModuleID"]].append(e)
+
+    # Refuse to import a dump we can't group. See group_key() — the 2026-07-25
+    # corruption was a missing field quietly becoming a default, so this runs
+    # before any output is produced rather than warning after the fact.
+    ungrouped = [e for e in events if group_key(e) is None]
+    if ungrouped:
+        print(f"⛔ {len(ungrouped)} of {len(events)} events carry no lecture "
+              f"group (no 3-part EventAbbr, no EventKey).")
+        print("   Importing them would collapse every affected course into a "
+              "single 'A' group and renumber its sections.")
+        for e in ungrouped[:5]:
+            print(f"   ModuleID={e.get('ModuleID')} "
+                  f"EventAbbr={e.get('EventAbbr')!r} "
+                  f"TeachingMethod={e.get('TeachingMethod')!r}")
+        print("   TSS likely changed its schema again — teach group_key() the "
+              "new field before re-running.")
+        raise SystemExit(1)
 
     placeholder_instr = detect_placeholder_instructors(events, mod_by_id)
     if placeholder_instr:
@@ -234,10 +289,10 @@ def main():
                   "restriction": "" if m.get("DeptApprovalReq") == "Not Required"
                                  else "D", "sections": []}
 
-        # group events by lecture number (EventKey) -> letter group
+        # group events by lecture number -> letter group
         groups = defaultdict(list)
         for e in evs:
-            groups[e.get("EventKey", "001")].append(e)
+            groups[group_key(e)].append(e)
 
         for gi, (key, gevs) in enumerate(sorted(groups.items())):
             letter = chr(ord("A") + gi)
