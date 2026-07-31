@@ -51,11 +51,17 @@ def _session_live():
     """True once the saved cookies represent a completed SSO+Duo login.
 
     A SAP_SESSIONID cookie is handed out BEFORE login finishes, so its mere
-    presence isn't proof — we confirm with the Fiori launchpad bootstrap
-    endpoint (/sap/bc/ui2/start_up), which returns 200 only for an authed
-    session. (We deliberately do NOT probe the con_module OData service here:
-    it 403s "Access denied" even for a fully-authed session until the SoC app
-    is loaded — that authorization is handled later by tss/pull_soc_batch.py.)
+    presence isn't proof — we ask the Fiori launchpad bootstrap endpoint
+    (/sap/bc/ui2/start_up) who we are.
+
+    HTTP 200 is NOT proof either, and assuming it was cost us the 2026-07-30
+    refresh: the TSS login page answers that endpoint with 200 as well, so a
+    long-dead session read as live, capture_session() returned instantly, and
+    the browser was killed before anyone could type a password. The pull then
+    failed against a session that had never been authenticated.
+
+    A real session answers with JSON naming the logged-in user; the login page
+    does not. So we require the identity fields, not the status code.
     """
     import ssl
     import urllib.request
@@ -76,9 +82,13 @@ def _session_live():
         "User-Agent": "Mozilla/5.0"})
     try:
         with urllib.request.urlopen(req, context=ctx, timeout=30) as r:
-            return r.status == 200
+            if r.status != 200:
+                return False
+            body = json.loads(r.read().decode("utf-8", "replace"))
     except Exception:
         return False
+    # Any one of these is absent from the login page's response.
+    return bool(body.get("id") or body.get("email") or body.get("fullName"))
 
 
 def capture_session(timeout=600):
@@ -142,13 +152,18 @@ def main():
         return 1
 
     try:
-        # 2. pull FA26 by hijacking the SoC app's own $batch. (The old direct
-        #    OData GET in tss/fetch_soc.py now 403s — TSS only serves the
-        #    con_module entities through the app's multipart batch. See
-        #    tss/pull_soc_batch.py.)
-        r = sh(PY, ROOT / "tss" / "pull_soc_batch.py", check=False)
+        # 2. pull FA26 straight from the con_module OData service.
+        #
+        #    This used to go through tss/pull_soc_batch.py, which drove the
+        #    Schedule-of-Classes app and rewrote the $batch it issued, because
+        #    direct GETs had started coming back 403 "Access denied". As of
+        #    2026-07-30 they return 200 again, and the hijack no longer works
+        #    at all: the app only queries once its filters are set, which is
+        #    not driveable headless or headed, so it never issues the request
+        #    there was to intercept. pull_soc_batch.py is kept for reference.
+        r = sh(PY, ROOT / "tss" / "fetch_soc.py", check=False)
         if r.returncode != 0:
-            print("\nSoC $batch pull failed. Catalog left unchanged.")
+            print("\nSoC pull failed. Catalog left unchanged.")
             return 1
 
         # 3. map the dumps into the parsed catalog
@@ -167,7 +182,7 @@ def main():
     print(f"\nCatalog after refresh: {after} courses ({after - before:+d}).")
 
     # 4. stamp the refresh date
-    today = datetime.date.today().strftime("%B %-d, %Y")
+    today = datetime.datetime.now().strftime("%B %-d, %Y at %-I:%M %p PT")
     STAMP.write_text(today + "\n")
     print(f"Stamped data/refreshed_at.txt = {today}")
 

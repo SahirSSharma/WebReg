@@ -1214,10 +1214,10 @@
     "building": "Extended Studies and Public Programs",
     "room": "127",
     "instructor": "Lauren Gilmore",
-    "avail": 15,
-    "limit": 15,
+    "avail": 10,
+    "limit": 10,
     "waitlist": 0,
-    "enrollable": 0,
+    "enrollable": 1,
     "cancelled": false,
     "note": ""
    },
@@ -1232,10 +1232,10 @@
     "building": "Extended Studies and Public Programs",
     "room": "127",
     "instructor": "Lauren Gilmore",
-    "avail": 15,
-    "limit": 15,
+    "avail": 10,
+    "limit": 10,
     "waitlist": 0,
-    "enrollable": 0,
+    "enrollable": 1,
     "cancelled": false,
     "note": ""
    }
