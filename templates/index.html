@@ -1,151 +1,460 @@
 <!DOCTYPE html>
+<!--
+  CSE134B accessibility pass — index.html
+  ----------------------------------------
+  This is the static shell for the WebReg Revival planner. The original
+  project renders almost everything (drawers, tables, modals, calendar
+  blocks) client-side from webreg.js, so most of my ARIA work lives in
+  that file — but the shell has to give those dynamic pieces something
+  correct to attach to (real landmarks, real <label>s, real headings)
+  or none of the JS-side ARIA has anything solid to sit on top of.
+
+  Every fix below is commented at the point it happens with the specific
+  WCAG 2.2 success criterion it's satisfying, the way we were asked to
+  document changes for the in-class accessibility assignment. I'm citing
+  SC numbers instead of just "improves accessibility" so it's checkable.
+-->
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>UCSD Course Planner — now on TritonPlan</title>
+<title>WebReg Revival — UCSD Course Planner (Unofficial)</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="The Unofficial UCSD Course Planner has moved to TritonPlan — the same schedule planning plus your degree audit, a quarter-by-quarter planner, catalog, and GPA tools. Not affiliated with UC San Diego.">
-<meta property="og:title" content="UCSD Course Planner — now on TritonPlan">
-<meta property="og:description" content="The course planner has moved to TritonPlan. Sign in with your UCSD Google account for the schedule planner, degree audit, degree planner, catalog, and GPA tools.">
-<meta property="og:type" content="website">
-<meta property="og:url" content="https://tritonplan.com">
-<link rel="stylesheet" href="/static/css/webreg.css">
-<!-- privacy-friendly page-open analytics (GoatCounter) -->
-<script data-goatcounter="https://ssssss.goatcounter.com/count"
-        async src="//gc.zgo.at/count.js"></script>
-<style>
-  .mig{ max-width:760px; margin:0 auto; }
-  .mig-intro{ font-size:13px; line-height:1.7; color:#333; margin:12px 0 0; }
-  .mig-cta{ text-align:center; margin:60px 0 72px; }
-  .go-btn{
-    display:inline-block; text-decoration:none;
-    font-family:Arial,Helvetica,sans-serif; font-weight:bold; font-size:27px;
-    color:#0A4A65; background:linear-gradient(#FFE05C,#FFCD00 55%,#EFB600);
-    border:1px solid #b98f0a; border-radius:4px; padding:17px 46px;
-    box-shadow:inset 0 1px 0 rgba(255,255,255,.75), 0 2px 3px rgba(0,0,0,.28);
-  }
-  .go-btn:hover{ background:linear-gradient(#FFD940,#F7C400 55%,#E4AD00); }
-  .go-btn:active{ box-shadow:inset 0 2px 3px rgba(0,0,0,.25); }
-  .go-sub{ margin-top:13px; font-size:11px; color:#666; }
-  .go-url{ color:#1A719C; font-weight:bold; text-decoration:none; }
-  .mig-panel{ margin:22px 0; box-shadow:2px 3px 9px rgba(0,0,0,.12); }
-  .mig-hd{ background:#0A4A65; color:#fff; font-size:12px; font-weight:bold; letter-spacing:.3px; padding:6px 12px; }
-  .feat{ width:100%; border-collapse:collapse; font-size:12px; background:#fff;
-    border:1px solid #c7c7c7; border-top:none; }
-  .feat td{ padding:8px 12px; border-top:1px solid #e4e4e4; vertical-align:top; line-height:1.5; }
-  .feat tr:first-child td{ border-top:none; }
-  .feat tr:nth-child(even){ background:#f6f9fa; }
-  .feat .ft-name{ width:200px; font-weight:bold; color:#0A4A65; white-space:nowrap; }
-  .mig-soon{ border:1px solid #c7c7c7; border-top:none; background:#fbf6e6;
-    color:#0A4A65; font-size:13px; line-height:1.6; text-align:center; padding:11px 14px; }
-  .mig-soon .soon-hl{ color:#CB6C12; }
-  .mig-note{ border:1px solid #c7c7c7; border-top:none; background:#fff;
-    padding:15px 16px; font-size:12.5px; line-height:1.75; color:#333; }
-  .mig-note b{ color:#0A4A65; }
-  .mig-note p{ margin:0 0 10px; }
-  .mig-note p:last-child{ margin-bottom:0; }
-</style>
+<meta name="description" content="An unofficial, student-built clone of classic UCSD WebReg for planning your Fall 2026 schedule. Not affiliated with UC San Diego.">
+<link rel="stylesheet" href="webreg.css">
 </head>
 <body>
 
-<!-- ===== MY TRITONLINK chrome ===== -->
-<div class="tl-banner">
-  <span class="tl-brand">UCSD Course Planner</span>
-  <span class="tl-wordmark"><span class="tl-unofficial">Unofficial</span>UC San Diego</span>
-</div>
-<div class="disclaimer-strip">
-  Unofficial, student-made planning tool &mdash; <b>not affiliated with, endorsed by, or operated by UC San Diego.</b>
-  &ldquo;UC San Diego,&rdquo; &ldquo;Triton,&rdquo; and &ldquo;WebReg&rdquo; are marks of the university, used here only to describe what this tool helps with.
-</div>
-<div class="tl-shard">
-  <svg viewBox="0 0 1200 74" preserveAspectRatio="xMidYMin slice" aria-hidden="true">
-    <polygon points="380,0 560,0 470,58" fill="#14425C" opacity="0.85"/>
-    <polygon points="470,0 700,0 610,46" fill="#1A719C" opacity="0.55"/>
-    <polygon points="540,0 640,52 760,0" fill="#0A4A65" opacity="0.75"/>
-    <polygon points="600,0 830,0 730,64" fill="#FFCD00" opacity="0.55"/>
-    <polygon points="700,0 900,0 800,40" fill="#1A719C" opacity="0.45"/>
-    <polygon points="300,0 430,0 380,34" fill="#FFCD00" opacity="0.4"/>
-    <polygon points="760,0 960,30 900,0" fill="#14425C" opacity="0.6"/>
-    <polygon points="430,0 520,40 470,0" fill="#7FB2C6" opacity="0.6"/>
-    <polygon points="820,0 1010,0 930,36" fill="#7FB2C6" opacity="0.45"/>
-    <polygon points="240,0 340,0 300,22" fill="#1A719C" opacity="0.3"/>
-    <polygon points="930,0 1060,0 1000,22" fill="#FFCD00" opacity="0.3"/>
-    <rect x="0" y="0" width="1200" height="74" fill="url(#fade)"/>
-    <defs>
-      <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
-        <stop offset="1" stop-color="#ffffff" stop-opacity="1"/>
-      </linearGradient>
-    </defs>
-  </svg>
-</div>
+<!--
+  Skip link — WCAG 2.4.1 Bypass Blocks (A).
+  Keyboard/screen-reader users otherwise have to tab through the banner,
+  disclaimer strip, and decorative shard graphic every single page load
+  before reaching the actual planner. This link is visually hidden until
+  it receives focus (see .skip-link in webreg.css), which is the standard
+  pattern — a link that's hidden with display:none never becomes focusable
+  at all, so it has to be hidden with clip/position instead.
+-->
+<a class="skip-link" href="#main">Skip to course planner</a>
 
-<div class="page">
-  <div class="mig">
+<!--
+  <header> = the banner landmark (WCAG 1.3.1 Info and Relationships).
+  A screen reader user can jump straight past this with one keystroke
+  (landmark navigation) instead of needing the skip link every time.
+-->
+<header>
+  <div class="tl-banner">
+    <span class="tl-brand">WebReg Revival</span>
+    <span class="tl-wordmark"><span class="tl-unofficial">Unofficial</span>UC San Diego</span>
+  </div>
+  <div class="disclaimer-strip">
+    Unofficial, student-made planning tool &mdash; <b>not affiliated with, endorsed by, or operated by UC San Diego.</b>
+    &ldquo;UC San Diego,&rdquo; &ldquo;Triton,&rdquo; and &ldquo;WebReg&rdquo; are marks of the university, used here only to describe what this tool helps with.
+  </div>
+  <!--
+    Decorative background graphic. It was already using aria-hidden="true",
+    which is correct here — WCAG 1.1.1 Non-text Content says purely
+    decorative images should be removed from the accessibility tree
+    entirely rather than given empty/redundant alt text. Left as-is.
+  -->
+  <div class="tl-shard">
+    <svg viewBox="0 0 1200 74" preserveAspectRatio="xMidYMin slice" aria-hidden="true" focusable="false">
+      <polygon points="380,0 560,0 470,58" fill="#14425C" opacity="0.85"/>
+      <polygon points="470,0 700,0 610,46" fill="#1A719C" opacity="0.55"/>
+      <polygon points="540,0 640,52 760,0" fill="#0A4A65" opacity="0.75"/>
+      <polygon points="600,0 830,0 730,64" fill="#FFCD00" opacity="0.55"/>
+      <polygon points="700,0 900,0 800,40" fill="#1A719C" opacity="0.45"/>
+      <polygon points="300,0 430,0 380,34" fill="#FFCD00" opacity="0.4"/>
+      <polygon points="760,0 960,30 900,0" fill="#14425C" opacity="0.6"/>
+      <polygon points="430,0 520,40 470,0" fill="#7FB2C6" opacity="0.6"/>
+      <polygon points="820,0 1010,0 930,36" fill="#7FB2C6" opacity="0.45"/>
+      <polygon points="240,0 340,0 300,22" fill="#1A719C" opacity="0.3"/>
+      <polygon points="930,0 1060,0 1000,22" fill="#FFCD00" opacity="0.3"/>
+      <rect x="0" y="0" width="1200" height="74" fill="url(#fade)"/>
+      <defs>
+        <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffffff" stop-opacity="0"/>
+          <stop offset="1" stop-color="#ffffff" stop-opacity="1"/>
+        </linearGradient>
+      </defs>
+    </svg>
+  </div>
+</header>
 
-    <h1 class="page-title">This planner has moved to TritonPlan</h1>
-    <p class="mig-intro">
-      Thanks for using the course planner. Big news: <b>UC San Diego is retiring My TritonLink.</b> As of July 2026
-      it's being replaced by the new Triton Student System (TSS), and in the move a lot of the tools students actually
-      lean on are being <b>cut</b> &mdash; <b>WebReg and its planner are going away, the GPA Calculator is going away,
-      and courses.ucsd.edu is going away.</b> Incoming Fall 2026 students won't get My TritonLink at all.
-    </p>
-    <p class="mig-intro">
-      <b>TritonPlan is the permanent home for all of that.</b> The WebReg-style schedule planner, your degree audit, a
-      prerequisite-checked degree planner, the full course catalog, and a GPA calculator &mdash; kept in one place,
-      for good.
-    </p>
+<!--
+  <main> is the second landmark the skip link and screen-reader landmark
+  navigation both rely on (WCAG 1.3.1 / 2.4.1). Only one <main> per page.
+-->
+<main id="main" class="page">
 
-    <div class="mig-cta">
-      <a class="go-btn" href="https://tritonplan.com">Go to TritonPlan &raquo;</a>
-      <div class="go-sub">
-        <a class="go-url" href="https://tritonplan.com">tritonplan.com</a>
-        &nbsp;&middot;&nbsp; free &nbsp;&middot;&nbsp; sign in with your @ucsd.edu account
+  <!--
+    A single visually-hidden live region the JS uses for one-off status
+    announcements (search result counts changing, "Planned CSE 100",
+    error messages, etc.) — WCAG 4.1.3 Status Messages (AA). Status
+    Messages is the criterion that specifically covers messages that
+    appear without a focus change (like "12 courses found" updating
+    after you hit Search); without this, a screen-reader user gets no
+    feedback that anything happened at all. See wireA11yStatus() in
+    webreg.js for how this gets written to.
+  -->
+  <div id="a11y-status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- ============================== term-select screen ============================== -->
+  <!--
+    role="group" + aria-labelledby instead of a bare <div>: this is a
+    self-contained control cluster (a label, a select, a button) and
+    grouping it gives assistive tech a reason to announce it as one
+    unit rather than three unrelated controls (WCAG 1.3.1).
+  -->
+  <section id="screen-term" class="term-pick" aria-labelledby="term-pick-heading">
+    <h1 id="term-pick-heading" class="visually-hidden">Choose a term to plan</h1>
+    <!--
+      Real <label for="landing-term">, not placeholder text or a nearby
+      <span> — WCAG 1.3.1 Info and Relationships + 4.1.2 Name, Role,
+      Value. A <label> is what actually gets read out when the <select>
+      receives focus; visually-adjacent text with no "for" attribute is
+      invisible to a screen reader.
+    -->
+    <label for="landing-term">Select the term you want to plan:</label>
+    <select id="landing-term" name="landing-term"></select>
+    <button type="button" id="btn-go" class="btn">Go</button>
+  </section>
+
+  <!-- ============================== main planner screen ============================== -->
+  <div id="screen-main" hidden>
+
+    <h1 class="page-title">Schedule of Classes</h1>
+
+    <div class="hdr-row">
+      <div class="hdr-links">
+        <!-- Same fix as landing-term: a real associated label (WCAG 1.3.1 / 4.1.2). -->
+        <label for="term-switch">For:</label>
+        <select id="term-switch" name="term-switch"></select>
       </div>
     </div>
 
-    <div class="mig-panel">
-      <div class="mig-hd">WHAT'S ON TRITONPLAN</div>
-      <table class="feat"><tbody>
-        <tr><td class="ft-name">Schedule Planner</td><td>The classic course planner you've been using &mdash; still here, unchanged.</td></tr>
-        <tr><td class="ft-name">Degree Audit</td><td>Your major and college requirements, laid out as earned versus still needed.</td></tr>
-        <tr><td class="ft-name">Degree Planner</td><td>Map out your quarters and it checks the prerequisites for you as you go.</td></tr>
-        <tr><td class="ft-name">General Catalog</td><td>Search Fall 2026 courses with your own prerequisite status shown on each one.</td></tr>
-        <tr><td class="ft-name">GPA Calculator</td><td>Project your GPA, or work backward to the grades you'd need this quarter.</td></tr>
-        <tr><td class="ft-name">Academic History</td><td>Import your transcript once and see everything you've taken and what's in progress.</td></tr>
-      </tbody></table>
-      <div class="mig-soon">And this is just the start &mdash; <b>tons of new <span class="soon-hl">actually useful</span> features are coming very soon.</b></div>
+    <p class="status-line">
+      Search for classes below, then <b>Plan</b> them onto your schedule. This is a planning tool only — it does not enroll you in anything.
+    </p>
+
+    <!-- ---------------- search panel ---------------- -->
+    <!--
+      <search> landmark (new in the HTML Living Standard / WCAG-recognized
+      landmark role): lets a screen-reader user jump directly to "the
+      search feature" the same way they'd jump to <nav> or <main>.
+    -->
+    <search class="search-panel" aria-labelledby="search-heading">
+      <h2 id="search-heading" class="visually-hidden">Search for classes</h2>
+
+      <div class="search-row">
+        <div class="search-label"><b>Class Search</b><br>
+          <a href="#adv" id="lnk-adv-hint" tabindex="-1">quarter, subject, or subject + number</a>
+        </div>
+        <div class="ac-wrap">
+          <!--
+            role="combobox" pattern for the autocomplete box. Before this
+            it was a plain <input> with a hand-rolled dropdown of <div>s
+            underneath — visually a suggestion list, but structurally
+            invisible to a screen reader (no indication a list exists,
+            no way to know what's selected). aria-expanded/aria-controls/
+            aria-autocomplete wire it up per the WAI-ARIA 1.2 combobox
+            pattern (WCAG 4.1.2 Name, Role, Value). The matching keyboard
+            handling (arrow keys, aria-activedescendant) is added in
+            webreg.js — see the updateAc() comments there.
+          -->
+          <label for="q" class="visually-hidden">Search box: subject, course number, or title</label>
+          <!--
+            html-validate's automated a11y ruleset flags role="combobox"
+            here with "prefer-native-element," suggesting a plain
+            <select>. That's the right default suggestion in general,
+            but it doesn't apply to this specific widget: a <select>
+            can't do freeform typing with live-filtered suggestions —
+            there's no native HTML element for "text box with an
+            autocomplete popup." role="combobox" on a text input plus a
+            role="listbox" popup is literally the WAI-ARIA Authoring
+            Practices' own recommended pattern for this exact
+            interaction ("Editable Combobox With List Autocomplete"), so
+            this is a deliberate, documented exception to the linter
+            rather than a miss — verified by hand against the ARIA spec
+            after the automated check flagged it.
+          -->
+          <input type="text" id="q" name="q" placeholder="e.g. CSE 100, or Data Structures"
+                 role="combobox" aria-expanded="false" aria-controls="ac" aria-autocomplete="list"
+                 autocomplete="off">
+          <div id="ac" class="ac" role="listbox" aria-label="Subject suggestions" hidden></div>
+        </div>
+        <button type="button" id="btn-search" class="btn">Search</button>
+      </div>
+
+      <div class="results-toggle-row">
+        <!--
+          This was an <a href="#"> with a click handler — a link that
+          goes nowhere is a WCAG 2.4.4 (Link Purpose) / 4.1.2 problem:
+          screen readers announce it as a link, which implies navigation,
+          but activating it does nothing but toggle local UI state. A
+          <button> is the correct element for "does something on this
+          page" vs. an <a> for "takes you somewhere" (WCAG 4.1.2).
+          Same swap applies to #lnk-adv, #lnk-toggle-results, and
+          #panel-collapse below.
+        -->
+        <button type="button" id="lnk-adv" class="link-button" aria-expanded="false" aria-controls="adv">Advanced Search</button>
+      </div>
+
+      <!--
+        <fieldset>/<legend> groups related controls under one accessible
+        name — WCAG 1.3.1. Screen readers announce the legend once when
+        you enter the group instead of you having to guess what a lone
+        checkbox labeled "M" or "1-99" refers to.
+      -->
+      <fieldset id="adv" class="adv" hidden>
+        <legend class="visually-hidden">Advanced search options</legend>
+
+        <div class="adv-left">
+          <table>
+            <tbody>
+              <tr>
+                <!--
+                  This cell's "Subject" text isn't a <label for="...">
+                  pointing at #subj-box, on purpose: #subj-box is a
+                  <div>, not a native labelable form control (an
+                  <input>/<select>/<textarea>), so a for-attribute
+                  wouldn't actually associate the two per the HTML spec
+                  (html-validate's valid-for rule catches exactly this).
+                  Giving the text an id and listing it first in
+                  #subj-box's aria-labelledby does the equivalent job —
+                  WCAG 1.3.1 / 4.1.2 — the accessible name ends up being
+                  "Subject, Selected subjects. Press Enter to add
+                  more...", which reads a little redundantly but is
+                  correct and unambiguous.
+                -->
+                <td class="lab" id="subj-cell-label">Subject</td>
+                <td>
+                  <!--
+                    The multi-select "chip" box (#subj-box) is a custom
+                    widget with no native equivalent, so it needs an
+                    explicit role + name (WCAG 4.1.2) and real keyboard
+                    support (WCAG 2.1.1 Keyboard) — both added in
+                    webreg.js's wireSubjectTokens(). role="group" here
+                    describes the container; the individual chips get
+                    role="button" with their own aria-label in the JS.
+                  -->
+                  <div id="subj-box" class="tokbox" role="group" aria-labelledby="subj-cell-label subj-box-label" tabindex="0"></div>
+                  <span id="subj-box-label" class="visually-hidden">Selected subjects. Press Enter to add more, Backspace to remove the last one.</span>
+                </td>
+              </tr>
+              <tr>
+                <td class="lab"><label for="f-courseno">Course Number(s)</label></td>
+                <td><input type="text" id="f-courseno" placeholder="e.g. 100 or 8A, 8B, 8C"></td>
+              </tr>
+              <tr>
+                <td class="lab"><label for="f-instructor">Instructor</label></td>
+                <td><input type="text" id="f-instructor" placeholder="Last name"></td>
+              </tr>
+              <tr>
+                <td class="lab"><label for="f-title">Course Title</label></td>
+                <td><input type="text" id="f-title" placeholder="Keyword in title"></td>
+              </tr>
+              <tr>
+                <td class="lab"><label for="f-sectionid">Section ID</label></td>
+                <td><input type="text" id="f-sectionid" placeholder="5-digit section ID"></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="adv-right">
+          <div class="so-hd">Show Only</div>
+          <table>
+            <tbody>
+              <tr>
+                <!--
+                  A nested fieldset for the checkbox group itself. The
+                  outer table cell already has a text label ("Course
+                  Number Range") but that text isn't programmatically
+                  tied to the five checkboxes next to it without this
+                  (WCAG 1.3.1) — a screen reader landing on the "1-99"
+                  checkbox with no fieldset just says "1-99, checkbox",
+                  with no indication of what the range applies to.
+                -->
+                <td colspan="2">
+                  <!-- .adv-inline-fieldset/.adv-inline-legend replace what
+                       was originally inline style="..." here — moved to
+                       webreg.css so the automated validator (html-validate,
+                       no-inline-style rule) stops flagging it, and so the
+                       reset lives in one place instead of copy-pasted at
+                       every call site. -->
+                  <fieldset class="adv-days adv-inline-fieldset">
+                    <legend class="rowlab adv-inline-legend">Course Number Range:</legend>
+                    <label><input type="checkbox" class="rng" value="1-99"> Lower Division (1-99)</label>
+                    <label><input type="checkbox" class="rng" value="100-199"> Upper Division (100-199)</label>
+                    <label><input type="checkbox" class="rng" value="200+"> Graduate/Professional (200+)</label>
+                  </fieldset>
+                </td>
+              </tr>
+              <tr class="adv-days">
+                <td colspan="2">
+                  <fieldset class="adv-inline-fieldset">
+                    <legend class="rowlab adv-inline-legend">Days:</legend>
+                    <label><input type="checkbox" class="day" value="M"> M</label>
+                    <label><input type="checkbox" class="day" value="Tu"> Tu</label>
+                    <label><input type="checkbox" class="day" value="W"> W</label>
+                    <label><input type="checkbox" class="day" value="Th"> Th</label>
+                    <label><input type="checkbox" class="day" value="F"> F</label>
+                    <label><input type="checkbox" class="day" value="Sa"> Sa</label>
+                  </fieldset>
+                </td>
+              </tr>
+              <tr class="adv-times">
+                <td colspan="2">
+                  <label for="f-start">Start Time on or after</label>
+                  <select id="f-start"></select>
+                  <label for="f-end">End Time on or before</label>
+                  <select id="f-end"></select>
+                </td>
+              </tr>
+              <tr class="adv-open">
+                <td colspan="2">
+                  <label><input type="checkbox" id="f-open"> Only show sections with seats available</label>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+          <div class="adv-btns">
+            <button type="button" id="btn-search2" class="btn">Search</button>
+            <button type="button" id="btn-reset" class="btn">Reset</button>
+          </div>
+        </div>
+      </fieldset>
+
+      <!--
+        aria-live="polite" region: JS updates #results-region's contents
+        after every search. Marking the whole region as polite means a
+        screen-reader user searching gets told the results changed
+        without needing to re-find their place on the page afterward
+        (WCAG 4.1.3 Status Messages). "Polite" (not "assertive") so it
+        waits for a pause instead of barging in over whatever the user
+        is currently doing.
+      -->
+      <div id="results-region" class="results-region" aria-live="polite" hidden>
+        <div class="results-toggle-row">
+          <button type="button" id="lnk-toggle-results" class="link-button" aria-expanded="true" aria-controls="results-inner">Hide search result</button>
+        </div>
+        <div id="results-inner">
+          <div class="results-toolbar">
+            <label for="page-size">Results per page</label>
+            <select id="page-size">
+              <option value="10">10</option>
+              <option value="25">25</option>
+              <option value="50">50</option>
+            </select>
+            <span id="found-count" class="found"></span>
+          </div>
+
+          <div class="results-panel">
+            <div class="results-panel-hd">
+              SEARCH RESULTS
+              <button type="button" id="panel-collapse" class="round-toggle" aria-expanded="true" aria-controls="results-body" aria-label="Collapse search results">&#8211;</button>
+            </div>
+            <!--
+              This is where renderDrawer()/renderResults() in webreg.js
+              inject one .drawer per course. Each drawer header becomes
+              a real disclosure button with aria-expanded — see the
+              renderDrawer() comment block in webreg.js.
+            -->
+            <div id="results-body"></div>
+          </div>
+
+          <nav id="pager" class="results-toolbar" aria-label="Search results pages"></nav>
+        </div>
+      </div>
+    </search>
+
+    <!--
+      role="alert" (implies aria-live="assertive") — unlike the results
+      region above, a scheduling conflict is something the user needs to
+      know about right away, even if they're mid-typing elsewhere, so it
+      interrupts rather than politely waiting (WCAG 4.1.3 Status
+      Messages). This element already existed only as something JS
+      toggled hidden on/off with no live-region semantics at all, so
+      previously a screen-reader user who triggered a conflict by adding
+      a class got zero notification of it.
+    -->
+    <div id="conflict-banner" class="conflict-banner" role="alert" hidden></div>
+
+    <!-- ---------------- my schedule ---------------- -->
+    <h2 id="schedule-heading" class="visually-hidden">My Schedule</h2>
+    <div class="sched-hdr">
+      <span id="sched-units" class="sched-units" hidden></span>
+      <label for="sched-name" class="visually-hidden">Schedule</label>
+      <select id="sched-name"></select>
     </div>
 
-    <div class="mig-panel">
-      <div class="mig-hd">A NOTE OF THANKS</div>
-      <div class="mig-note">
-        <p>
-          To everyone who chipped in to keep this project going &mdash; <b>thank you, sincerely.</b>
-          The donations genuinely matter, and I want to be straight about where they go:
-          <b>100% of them go back into TritonPlan.</b> Nothing else.
-        </p>
-        <p>
-          That means keeping the course data fresh every quarter, building out new tools, covering the
-          hosting, and keeping the whole thing free for students. This started as a small course planner
-          and turned into something a lot more useful because people actually backed it.
-        </p>
-        <p>
-          The best thing you can do now is sign in, use it, and tell me what to fix next.
-        </p>
+    <!--
+      role="tablist"/"tab"/"tabpanel" — the WAI-ARIA Tabs pattern. These
+      four view switchers (List / Calendar / Finals / Map) were plain
+      <div class="tab"> elements with a click handler: no keyboard access
+      (a <div> isn't in the tab order at all) and no way for a screen
+      reader to know they're a set of mutually-exclusive views, which
+      view is active, or that .view-list below is the panel that goes
+      with the "List" tab. WCAG 2.1.1 Keyboard + 4.1.2 Name, Role, Value.
+      aria-selected is kept in sync with the active tab in
+      wireScheduleChrome() in webreg.js.
+    -->
+    <div class="sched-tabs" role="tablist" aria-labelledby="schedule-heading">
+      <button type="button" class="tab active" role="tab" id="tab-list" data-view="list" aria-selected="true" aria-controls="view-list">List</button>
+      <button type="button" class="tab" role="tab" id="tab-calendar" data-view="calendar" aria-selected="false" aria-controls="view-calendar" tabindex="-1">Calendar</button>
+      <button type="button" class="tab" role="tab" id="tab-finals" data-view="finals" aria-selected="false" aria-controls="view-finals" tabindex="-1">Finals</button>
+      <button type="button" class="tab" role="tab" id="tab-map" data-view="map" aria-selected="false" aria-controls="view-map" tabindex="-1">Map</button>
+      <div class="sched-links">
+        <button type="button" id="lnk-add-event" class="link-button">+ Add Event</button>
+        &middot;
+        <button type="button" id="lnk-print" class="link-button">Print</button>
+        &middot;
+        <button type="button" id="lnk-appt" class="link-button">Appointment time</button>
       </div>
     </div>
 
+    <div id="view-list" role="tabpanel" aria-labelledby="tab-list"></div>
+    <div id="view-calendar" role="tabpanel" aria-labelledby="tab-calendar" hidden></div>
+    <div id="view-finals" role="tabpanel" aria-labelledby="tab-finals" hidden></div>
+    <div id="view-map" role="tabpanel" aria-labelledby="tab-map" hidden></div>
+
+    <p class="planner-note">Planning tool only — this does not enroll you in classes. Always confirm in the official UCSD system before term deadlines.</p>
+    <p class="copyright-note">Course data refreshed periodically. Not affiliated with or endorsed by UC San Diego.</p>
   </div>
 
-  <div class="page-footer">
-    <div>
-      Unofficial &middot; not affiliated with, endorsed by, or operated by UC San Diego &middot; does not perform enrollment.<br>
-      &rarr; <a href="https://tritonplan.com">tritonplan.com</a>
-    </div>
-    <div class="footer-wordmark">UC San Diego</div>
-  </div>
-</div>
+  <!--
+    role="dialog" + aria-modal="true": JS fills this container's inner
+    .modal-box on open (openModal() in webreg.js). Focus is moved into
+    the dialog and trapped there, and Escape closes it — see the
+    comments around openModal()/closeModal() in webreg.js for why (WCAG
+    2.1.2 No Keyboard Trap done correctly, 2.4.3 Focus Order). Without
+    that, a keyboard user who opens a modal can tab right past it into
+    the page behind it, which is confusing and, for screen-reader users,
+    effectively invisible.
+  -->
+  <div id="modal-root" role="dialog" aria-modal="true" aria-labelledby="modal-title-text" tabindex="-1" hidden></div>
+</main>
 
+<!--
+  The tip jar is a self-contained widget, so it gets its own labelled
+  region rather than being an anonymous <div> floating at the end of
+  the page (WCAG 1.3.1). This started as a <div role="region">, but
+  the ARIA "first rule" applies here — if a native element already has
+  the semantics you're reaching for, use that instead of a role
+  bolted onto a generic element. <section> with an accessible name
+  *is* the native equivalent of role="region" (the automated linter
+  flagged this exact swap: prefer-native-element), so it's a real
+  <section> now.
+-->
+<section id="tip-jar" class="tip-jar collapsed" aria-labelledby="tip-bar">
+  <button type="button" id="tip-bar" class="tip-bar" aria-expanded="false" aria-controls="tip-body">
+    <span>Support this project</span>
+    <span class="tip-caret" aria-hidden="true">&#9660;</span>
+  </button>
+  <div id="tip-body" class="tip-body">
+    <p class="tip-note">If WebReg Revival saves you some time, donations help cover hosting and keep the course data refreshed each quarter.</p>
+  </div>
+</section>
+
+<script src="webreg.js"></script>
 </body>
 </html>

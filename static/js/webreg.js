@@ -1,11 +1,68 @@
 /* WebReg Revival — classic WebReg 2.0 single-page app.
-   Consumes the pinned JSON API (see project docs). No frameworks. */
+   Consumes the pinned JSON API (see project docs). No frameworks.
+
+   ACCESSIBILITY PASS (CSE134B): this file renders almost the entire UI
+   from JS template strings, so most of the app's actual accessibility
+   problems live here, not in index.html. Every change is commented
+   in place with the WCAG 2.2 success criterion it's fixing. The
+   running theme: a lot of "buttons" in the original were <span>/<div>
+   elements with only a click handler — which means they render, they
+   look right, and a mouse user never notices anything's wrong, but a
+   keyboard-only or screen-reader user can't reach them at all (no
+   native focusability, no announced role). That's WCAG 2.1.1 Keyboard
+   and 4.1.2 Name, Role, Value, and it's the single biggest category
+   of fix below. */
 "use strict";
 
 /* ================================================================ utils */
 
 function $(sel, root) { return (root || document).querySelector(sel); }
 function $all(sel, root) { return Array.from((root || document).querySelectorAll(sel)); }
+
+/*
+  WCAG 4.1.3 Status Messages (AA). One shared live region (#a11y-status,
+  declared in index.html with aria-live="polite") that every "something
+  just happened" moment in the app writes a short sentence into: search
+  result counts changing, a class getting planned, an error coming back
+  from the API. None of that used to be announced at all — a sighted
+  user sees the results grid repaint or a green success modal pop up;
+  a screen-reader user got total silence unless they went looking.
+  Clearing the region first and re-setting it on a tiny delay is a
+  common trick to make sure repeated identical messages ("1 course
+  found" twice in a row) still get announced, since some AT only
+  reacts to a live region's content actually changing.
+*/
+function announce(msg) {
+  const el = $("#a11y-status");
+  if (!el) return;
+  el.textContent = "";
+  window.setTimeout(() => { el.textContent = msg; }, 50);
+}
+
+/*
+  Minimal focus trap for the modal dialog (WCAG 2.1.2 No Keyboard Trap —
+  yes, the SC is *named* "no keyboard trap," but what it actually
+  requires is that if focus enters a construct like a modal, the user
+  can still move freely *within* it and get back out; a dialog that
+  lets Tab silently walk focus into the page behind it is arguably a
+  worse experience even though it's not technically "trapped" anywhere.
+  See openModal()/closeModal() below for how this gets wired up and
+  torn down.) Keeps Tab/Shift+Tab cycling among the dialog's own
+  focusable elements instead of escaping into the page behind it.
+*/
+function trapFocus(container, evt) {
+  const focusables = $all(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+    container
+  ).filter(el => el.offsetParent !== null);
+  if (!focusables.length) return;
+  const first = focusables[0], last = focusables[focusables.length - 1];
+  if (evt.shiftKey && document.activeElement === first) {
+    evt.preventDefault(); last.focus();
+  } else if (!evt.shiftKey && document.activeElement === last) {
+    evt.preventDefault(); first.focus();
+  }
+}
 
 function esc(s) {
   return String(s == null ? "" : s)
@@ -278,14 +335,39 @@ function switchTerm(code) {
 
 function wireSearch() {
   $("#btn-search").addEventListener("click", simpleSearch);
-  $("#q").addEventListener("keydown", e => { if (e.key === "Enter") { hideAc(); simpleSearch(); } });
+  $("#q").addEventListener("keydown", e => {
+    const acOpen = !$("#ac").hidden;
+    if (e.key === "ArrowDown" && acOpen) { e.preventDefault(); acSetActive(acActiveIdx + 1); }
+    else if (e.key === "ArrowUp" && acOpen) { e.preventDefault(); acSetActive(acActiveIdx - 1); }
+    else if (e.key === "Enter") {
+      const items = $all("#ac div");
+      if (acOpen && acActiveIdx >= 0 && items[acActiveIdx]) {
+        /* a suggestion is highlighted via the keyboard — Enter picks it,
+           same as a mouse click would (WCAG 2.1.1 Keyboard: every
+           mouse-operable action needs a keyboard equivalent) */
+        e.preventDefault();
+        $("#q").value = items[acActiveIdx].dataset.code;
+        hideAc();
+        simpleSearch();
+      } else {
+        hideAc();
+        simpleSearch();
+      }
+    } else if (e.key === "Escape" && acOpen) { hideAc(); }
+  });
   $("#q").addEventListener("input", updateAc);
   $("#q").addEventListener("blur", () => setTimeout(hideAc, 180));
 
+  /* aria-expanded is the mechanism (not the button's own text) that
+     tells a screen reader whether the thing it controls is open — WCAG
+     4.1.2 Name, Role, Value. These three toggles already changed their
+     visible label on click, but were never updating aria-expanded to
+     match, so AT and sighted users could disagree about the state. */
   $("#lnk-adv").addEventListener("click", () => {
     const adv = $("#adv");
     adv.hidden = !adv.hidden;
     $("#lnk-adv").textContent = adv.hidden ? "Advanced Search" : "Hide advanced search";
+    $("#lnk-adv").setAttribute("aria-expanded", String(!adv.hidden));
   });
   $("#btn-search2").addEventListener("click", advSearch);
   $("#btn-reset").addEventListener("click", resetAdv);
@@ -297,42 +379,95 @@ function wireSearch() {
     S.resultsShown = !S.resultsShown;
     $("#results-inner").hidden = !S.resultsShown;
     $("#lnk-toggle-results").textContent = S.resultsShown ? "Hide search result" : "Show search result";
+    $("#lnk-toggle-results").setAttribute("aria-expanded", String(S.resultsShown));
   });
   $("#panel-collapse").addEventListener("click", () => {
     S.panelCollapsed = !S.panelCollapsed;
     $("#results-body").hidden = S.panelCollapsed;
     $("#panel-collapse").innerHTML = S.panelCollapsed ? "+" : "&#8211;";
+    $("#panel-collapse").setAttribute("aria-expanded", String(!S.panelCollapsed));
+    $("#panel-collapse").setAttribute("aria-label", S.panelCollapsed ? "Expand search results" : "Collapse search results");
   });
 
   wireSubjectTokens();
 }
 
 /* subject typeahead on the simple box */
+/*
+  #q was already a text input, so it was always keyboard-typeable — the
+  gap was that the suggestion list popping up underneath it had zero
+  ARIA relationship to the input (WCAG 4.1.2 Name, Role, Value) and no
+  way to arrow through it (WCAG 2.1.1 Keyboard); a sighted mouse user
+  could see and click a suggestion, but a screen-reader user had no
+  idea the list existed. #q already carries role="combobox" +
+  aria-controls="ac" from index.html; this adds the other half of the
+  WAI-ARIA combobox pattern: role="option" on each suggestion,
+  aria-activedescendant tracking which one is highlighted, and
+  Up/Down/Enter handling. AC_ACTIVE_IDX/module state kept local to this
+  file (not on S) since it's pure UI transient state.
+*/
+let acActiveIdx = -1;
+
 function updateAc() {
   const q = $("#q").value.trim();
   const box = $("#ac");
+  const input = $("#q");
   if (q.length < 2 || /\s/.test(q)) { hideAc(); return; }
   const ql = q.toLowerCase();
   const hits = S.subjects.filter(s =>
     s.code.toLowerCase().startsWith(ql) || s.name.toLowerCase().includes(ql)).slice(0, 12);
   if (!hits.length) { hideAc(); return; }
-  box.innerHTML = hits.map(s => {
+  box.innerHTML = hits.map((s, i) => {
     const label = s.code + " / " + s.name;
     const idx = label.toLowerCase().indexOf(ql);
     const html = idx < 0 ? esc(label)
       : esc(label.slice(0, idx)) + "<u>" + esc(label.slice(idx, idx + q.length)) + "</u>" + esc(label.slice(idx + q.length));
-    return '<div data-code="' + esc(s.code) + '">' + html + "</div>";
+    return '<div id="ac-opt-' + i + '" role="option" aria-selected="false" data-code="' + esc(s.code) + '">' + html + "</div>";
   }).join("");
   box.hidden = false;
+  input.setAttribute("aria-expanded", "true");
+  acActiveIdx = -1;
   $all("div", box).forEach(d => d.addEventListener("mousedown", () => {
     $("#q").value = d.dataset.code;
     hideAc();
     simpleSearch();
   }));
 }
-function hideAc() { $("#ac").hidden = true; }
+
+function acSetActive(i) {
+  const items = $all("#ac div");
+  if (!items.length) return;
+  acActiveIdx = (i + items.length) % items.length;
+  items.forEach((el, idx) => el.setAttribute("aria-selected", String(idx === acActiveIdx)));
+  $("#q").setAttribute("aria-activedescendant", items[acActiveIdx].id);
+}
+
+function hideAc() {
+  $("#ac").hidden = true;
+  $("#q").setAttribute("aria-expanded", "false");
+  $("#q").removeAttribute("aria-activedescendant");
+  acActiveIdx = -1;
+}
 
 /* advanced-search subject chips */
+/*
+  The subject picker is a custom widget with no native HTML equivalent
+  (a multi-select of "chips" that opens a filterable dropdown), so
+  every bit of keyboard support has to be built by hand — WCAG 2.1.1
+  Keyboard. Three separate fixes here:
+    1. Each chip's "x" used to be a <span> inside a <span> that was
+       only removable by clicking exactly on it with a mouse — no
+       keyboard path existed at all. It's now a real <button> with a
+       descriptive aria-label ("Remove CSE / Computer Science...")
+       instead of a lone "×" glyph, which also fixes WCAG 4.1.2 (a
+       button whose only accessible name is a multiplication sign
+       tells a screen-reader user nothing about what it removes).
+    2. The box itself (already given tabindex="0"/role="group" in
+       index.html) opens the dropdown on Enter/Space, not just click.
+    3. The floating filter dropdown gets role="listbox"/"option" and
+       Up/Down/Enter/Escape handling, instead of being mousedown-only
+       <div>s — the WAI-ARIA combobox-with-listbox pattern.
+*/
 function wireSubjectTokens() {
   const box = $("#subj-box");
   let drop = null;
@@ -347,13 +482,21 @@ function wireSubjectTokens() {
       const sub = S.subjects.find(s => s.code === code);
       const chip = document.createElement("span");
       chip.className = "tok";
-      chip.innerHTML = '<span class="x">&times;</span>' + esc(code + " / " + (sub ? sub.name : ""));
-      chip.title = "Remove";
-      chip.addEventListener("click", e => {
+      const label = code + " / " + (sub ? sub.name : "");
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "x";
+      removeBtn.setAttribute("aria-label", "Remove " + label);
+      removeBtn.textContent = "×";
+      chip.appendChild(removeBtn);
+      chip.appendChild(document.createTextNode(label));  /* createTextNode is already safe against injection — esc() is only needed when building innerHTML strings, not real text nodes */
+      const remove = e => {
         e.stopPropagation();
         S.selSubjects = S.selSubjects.filter(c => c !== code);
         renderChips();
-      });
+        box.focus();
+      };
+      removeBtn.addEventListener("click", remove);
       box.appendChild(chip);
     }
   }
@@ -366,27 +509,53 @@ function wireSubjectTokens() {
     const r = box.getBoundingClientRect();
     drop.style.left = (r.left + window.scrollX) + "px";
     drop.style.top = (r.bottom + window.scrollY) + "px";
-    drop.innerHTML = '<input placeholder="Type to filter">'
-      + '<div class="opts"></div>';
+    drop.innerHTML = '<label class="visually-hidden" for="subj-filter">Filter subjects</label>'
+      + '<input id="subj-filter" placeholder="Type to filter" role="combobox" aria-expanded="true" aria-controls="subj-listbox" aria-autocomplete="list">'
+      + '<div class="opts" id="subj-listbox" role="listbox" aria-label="Matching subjects"></div>';
     document.body.appendChild(drop);
     const inp = $("input", drop);
     const opts = $(".opts", drop);
+    let activeIdx = -1;
+
+    function setActive(i) {
+      const items = $all(".opt", opts);
+      if (!items.length) { activeIdx = -1; return; }
+      activeIdx = (i + items.length) % items.length;
+      items.forEach((el, idx) => el.setAttribute("aria-selected", String(idx === activeIdx)));
+      items[activeIdx].scrollIntoView({ block: "nearest" });
+      inp.setAttribute("aria-activedescendant", items[activeIdx].id);
+    }
+    function choose(code) {
+      S.selSubjects.push(code);
+      renderChips();
+      fill(inp.value);
+      inp.focus();
+    }
     function fill(f) {
       const fl = (f || "").toLowerCase();
-      opts.innerHTML = S.subjects
+      const matches = S.subjects
         .filter(s => !S.selSubjects.includes(s.code))
         .filter(s => !fl || s.code.toLowerCase().startsWith(fl) || s.name.toLowerCase().includes(fl))
-        .slice(0, 400)
-        .map(s => '<div class="opt" data-code="' + esc(s.code) + '">' + esc(s.code + " / " + s.name) + "</div>")
+        .slice(0, 400);
+      opts.innerHTML = matches
+        .map((s, i) => '<div class="opt" role="option" id="subj-opt-' + i + '" data-code="' + esc(s.code) + '">'
+          + esc(s.code + " / " + s.name) + "</div>")
         .join("");
+      activeIdx = -1;
       $all(".opt", opts).forEach(d => d.addEventListener("mousedown", e => {
         e.preventDefault();
-        S.selSubjects.push(d.dataset.code);
-        renderChips();
-        fill(inp.value);
-        inp.focus();
+        choose(d.dataset.code);
       }));
     }
+    inp.addEventListener("keydown", e => {
+      const items = $all(".opt", opts);
+      if (e.key === "ArrowDown") { e.preventDefault(); setActive(activeIdx + 1); }
+      else if (e.key === "ArrowUp") { e.preventDefault(); setActive(activeIdx - 1); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        if (activeIdx >= 0 && items[activeIdx]) choose(items[activeIdx].dataset.code);
+      } else if (e.key === "Escape") { e.preventDefault(); closeDrop(); box.focus(); }
+    });
     fill("");
     inp.addEventListener("input", () => fill(inp.value));
     inp.focus();
@@ -394,6 +563,10 @@ function wireSubjectTokens() {
   function closeDrop() { if (drop) { drop.remove(); drop = null; } }
 
   box.addEventListener("click", openDrop);
+  box.addEventListener("keydown", e => {
+    if (e.target !== box) return;   /* don't fire when focus is on a chip's remove button */
+    if (e.key === "Enter" || e.key === " ") { e.preventDefault(); openDrop(); }
+  });
   document.addEventListener("mousedown", e => {
     if (drop && !drop.contains(e.target) && !box.contains(e.target)) closeDrop();
   });
@@ -561,7 +734,11 @@ function courseUnits(course) {
 function renderResults() {
   const list = filteredCourses();
   const n = list.length;
-  $("#found-count").textContent = n + (n === 1 ? " course found" : " courses found");
+  const foundText = n + (n === 1 ? " course found" : " courses found");
+  $("#found-count").textContent = foundText;
+  /* WCAG 4.1.3 Status Messages — tell screen-reader users the result
+     count changed without moving their focus off the search box. */
+  announce(foundText + ".");
 
   const pages = Math.max(1, Math.ceil(n / S.pageSize));
   if (S.page > pages) S.page = pages;
@@ -579,16 +756,31 @@ function renderResults() {
   for (const entry of slice) body.appendChild(renderDrawer(entry));
 }
 
+/*
+  WCAG 2.1.1 Keyboard + 4.1.2 Name, Role, Value. Pagination used to be
+  built out of <span class="pg"> elements — visually identical to
+  buttons (the .pg CSS class doesn't care what tag it's on), but a
+  <span> is never in the tab order and carries no button semantics, so
+  this whole pager was mouse-only. Switched to real <button> elements;
+  aria-current="page" replaces the plain ".cur" styling class as the
+  thing that actually tells assistive tech which page you're on (the
+  visual "cur" look stays exactly the same, since CSS can key off
+  [aria-current="page"] just as easily as .cur — see webreg.css).
+*/
 function renderPager(pages) {
   const pager = $("#pager");
   pager.innerHTML = "";
+  const ARIA_LABEL = { "&laquo;": "Previous page", "&raquo;": "Next page" };
   function btn(label, page, cls, disabled) {
-    const s = document.createElement("span");
-    s.className = "pg " + (cls || "");
-    s.innerHTML = label;
-    if (disabled) s.classList.add("off");
-    else s.addEventListener("click", () => { S.page = page; renderResults(); });
-    pager.appendChild(s);
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "pg " + (cls || "");
+    b.innerHTML = label;
+    if (ARIA_LABEL[label]) b.setAttribute("aria-label", ARIA_LABEL[label]);
+    if (cls === "cur") b.setAttribute("aria-current", "page");
+    if (disabled) { b.classList.add("off"); b.disabled = true; }
+    else b.addEventListener("click", () => { S.page = page; renderResults(); });
+    pager.appendChild(b);
   }
   btn("First", 1, "", S.page === 1);
   btn("&laquo;", Math.max(1, S.page - 1), "arrow", S.page === 1);
@@ -602,13 +794,29 @@ function renderPager(pages) {
   btn("Last", pages, "", S.page === pages);
 }
 
+/*
+  WCAG 2.1.1 Keyboard + 4.1.2 Name, Role, Value. Each course drawer
+  header used to be a <div class="drawer-hd"> with only a click
+  listener — a mouse-only disclosure widget with no way to tell (short
+  of trial and error) whether it was open or closed. Now it's a real
+  <button> (native keyboard support, no reinventing Enter/Space
+  handling) with aria-expanded reflecting S.open, and aria-controls
+  pointing at the drawer body it reveals. The .tri triangle glyph is
+  purely decorative (the aria-expanded state already says open/closed),
+  so it's marked aria-hidden — WCAG 1.1.1 Non-text Content.
+*/
 function renderDrawer(entry) {
   const c = entry.course;
   const d = document.createElement("div");
   d.className = "drawer" + (S.open.has(c.id) ? " open" : "");
-  const hd = document.createElement("div");
+  const isOpen = S.open.has(c.id);
+  const bodyId = "drawer-body-" + c.id;
+  const hd = document.createElement("button");
+  hd.type = "button";
   hd.className = "drawer-hd";
-  hd.innerHTML = '<span class="tri"></span>'
+  hd.setAttribute("aria-expanded", String(isOpen));
+  hd.setAttribute("aria-controls", bodyId);
+  hd.innerHTML = '<span class="tri" aria-hidden="true"></span>'
     + '<span class="drawer-code">' + esc(c.subject_code) + " " + esc(c.course_num) + "</span>"
     + '<span class="drawer-title">' + esc(c.title) + " " + esc(unitsSuffix(c.units)) + "</span>";
   hd.addEventListener("click", () => {
@@ -616,8 +824,9 @@ function renderDrawer(entry) {
     renderResults();
   });
   d.appendChild(hd);
-  if (S.open.has(c.id)) {
+  if (isOpen) {
     const bodyEl = document.createElement("div");
+    bodyEl.id = bodyId;
     bodyEl.className = "drawer-body";
     bodyEl.appendChild(renderCourseLinks(c));
     bodyEl.appendChild(renderSectionTable(entry));
@@ -645,7 +854,15 @@ function renderSectionTable(entry) {
   const c = entry.course;
   const table = document.createElement("table");
   table.className = "sec-table";
-  const thead = "<thead><tr>" + SEC_COLS.map(h => "<th>" + h + "</th>").join("") + "</tr></thead>";
+  /* scope="col" — WCAG 1.3.1 Info and Relationships. These tables use
+     rowspan heavily (one course can span several meeting rows), which
+     is exactly the case where a screen reader needs an explicit
+     row/column relationship instead of guessing from position; scope
+     is the cheapest version of that fix (a full headers/id mapping per
+     cell would be more precise but is a lot of markup for a table this
+     dense — scope="col" at least gets every data cell associated with
+     its column header, which was previously not guaranteed at all). */
+  const thead = "<thead><tr>" + SEC_COLS.map(h => '<th scope="col">' + h + "</th>").join("") + "</tr></thead>";
   let html = thead + "<tbody>";
 
   for (const g of entry.groups) {
@@ -667,6 +884,13 @@ function renderSectionTable(entry) {
     }
   }
   html += "</tbody>";
+  /* WCAG 1.3.1 — a visually-hidden <caption> gives this table a name a
+     screen reader announces before reading any cells ("Sections for
+     CSE 100, Data Structures and Object-Oriented Design"), instead of
+     the table just starting mid-context. Doesn't affect the visual
+     layout since .sr-only clips it off-screen. */
+  html = '<caption class="sr-only">Sections for ' + esc(c.subject_code + " " + c.course_num) + ", "
+    + esc(c.title) + "</caption>" + html;
   table.innerHTML = html;
 
   $all("button[data-act]", table).forEach(b => {
@@ -755,8 +979,15 @@ function unitRowsHtml(course, unit) {
   html += availCell;
   html += '<td rowspan="' + span + '">' + seatsDisplay(sec && sec.seats_limit) + "</td>";
   html += '<td rowspan="' + span + '">' + (sec ? (sec.waitlist_ct || 0) : "") + "</td>";
-  html += '<td rowspan="' + span + '"><a href="https://ucsandiegobookstore.com/" target="_blank" rel="noopener">'
-    + '<span class="bookico"></span> <span class="popout"></span></a></td>';
+  /* This link's only visible content was a CSS icon glyph (.bookico, a
+     background-image with no text) — which gives it no accessible name
+     at all (WCAG 2.4.4 Link Purpose, 4.1.2 Name, Role, Value). A screen
+     reader would've announced it as just "link" with nothing to say
+     what it links to. aria-label supplies the name that was missing;
+     .bookico itself gets aria-hidden since it's decorative once the
+     link has a real name. */
+  html += '<td rowspan="' + span + '"><a href="https://ucsandiegobookstore.com/" target="_blank" rel="noopener" aria-label="Buy course materials at the UC San Diego Bookstore (opens in a new tab)">'
+    + '<span class="bookico" aria-hidden="true"></span></a></td>';
   html += '<td rowspan="' + span + '">' + instructorHtml(instr) + "</td>";
   html += actionCell;
   html += "</tr>";
@@ -796,16 +1027,49 @@ function updateMapGlow() {
   mapTab.classList.toggle("glow-new", !seen && S.schedule.length >= 2);
 }
 
+/*
+  List / Calendar / Finals / Map are now real <button role="tab">
+  elements inside a role="tablist" (index.html) instead of plain
+  <div class="tab">s, so this needed two things per the WAI-ARIA
+  Authoring Practices Tabs pattern (WCAG 2.1.1 Keyboard, 4.1.2 Name,
+  Role, Value):
+    1. aria-selected kept in sync with which tab is active (not just
+       the .active CSS class, which is invisible to a screen reader).
+    2. Left/Right arrow keys move between tabs, wrapping around, with
+       only the active tab left in the Tab order (roving tabindex —
+       tabindex="0" on the selected tab, "-1" on the rest). That's what
+       lets a screen-reader/keyboard user reach "Map" with two key
+       presses instead of Tabbing past every button on the page to get
+       there, and matches how tabs behave in every native OS.
+*/
+function activateTab(tab) {
+  S.view = tab.dataset.view;
+  if (tab.dataset.view === "map") {
+    tab.classList.remove("glow-new");
+    localStorage.setItem("webreg_map_seen", "1");
+  }
+  $all(".tab").forEach(x => {
+    const on = x === tab;
+    x.classList.toggle("active", on);
+    x.setAttribute("aria-selected", String(on));
+    x.tabIndex = on ? 0 : -1;
+  });
+  renderSchedule();
+}
+
 function wireScheduleChrome() {
-  $all(".tab").forEach(t => t.addEventListener("click", () => {
-    S.view = t.dataset.view;
-    if (t.dataset.view === "map") {
-      t.classList.remove("glow-new");
-      localStorage.setItem("webreg_map_seen", "1");
-    }
-    $all(".tab").forEach(x => x.classList.toggle("active", x === t));
-    renderSchedule();
-  }));
+  const tabs = $all(".tab");
+  tabs.forEach((t, i) => {
+    t.addEventListener("click", () => { activateTab(t); t.focus(); });
+    t.addEventListener("keydown", e => {
+      let next = null;
+      if (e.key === "ArrowRight") next = tabs[(i + 1) % tabs.length];
+      else if (e.key === "ArrowLeft") next = tabs[(i - 1 + tabs.length) % tabs.length];
+      else if (e.key === "Home") next = tabs[0];
+      else if (e.key === "End") next = tabs[tabs.length - 1];
+      if (next) { e.preventDefault(); activateTab(next); next.focus(); }
+    });
+  });
   $("#lnk-add-event").addEventListener("click", () => openEventModal(null));
   $("#lnk-print").addEventListener("click", () => window.print());
   $("#lnk-appt").addEventListener("click", openAppointment);
@@ -896,7 +1160,15 @@ function renderConflictBanner() {
   if (!pairs.length) { el.hidden = true; el.innerHTML = ""; return; }
   el.className = "conflict-banner";
   el.hidden = false;
-  el.innerHTML = '<div class="hd"><span class="warn-tri"></span>You have scheduling conflicts!</div>'
+  /* The warning-triangle glyphs throughout this file (.warn-tri /
+     .ok-circ) are CSS-drawn shapes with no semantic content of their
+     own — the text right next to them ("You have scheduling
+     conflicts!", "Request Failed", etc.) already says what's going on.
+     aria-hidden="true" keeps a screen reader from announcing something
+     like "graphic, graphic" with no useful information (WCAG 1.1.1
+     Non-text Content: decorative images/icons should be hidden from
+     the accessibility tree rather than exposed with no name). */
+  el.innerHTML = '<div class="hd"><span class="warn-tri" aria-hidden="true"></span>You have scheduling conflicts!</div>'
     + "<ul>" + pairs.map(p => "<li>" + esc(p) + "</li>").join("") + "</ul>"
     + "You are responsible for resolving time conflicts, which may also include conflicts "
     + "in the midterm or final exam schedules. Special accommodations are not guaranteed. "
@@ -938,13 +1210,14 @@ function renderListView() {
   const root = $("#view-list");
   if (!S.schedule.length) {
     root.innerHTML = '<table class="list-table"><thead><tr>'
-      + LIST_COLS.map(h => "<th>" + h + "</th>").join("") + "</tr></thead></table>"
+      /* WCAG 1.3.1 — same scope="col" fix as the section table above */
+      + LIST_COLS.map(h => '<th scope="col">' + h + "</th>").join("") + "</tr></thead></table>"
       + '<div class="list-empty">No classes on your schedule for this term. '
       + "Search for classes above, then Plan them.</div>";
     return;
   }
   let html = '<table class="list-table"><thead><tr>'
-    + LIST_COLS.map(h => "<th>" + h + "</th>").join("") + "</tr></thead><tbody>";
+    + LIST_COLS.map(h => '<th scope="col">' + h + "</th>").join("") + "</tr></thead><tbody>";
 
   const order = { enrolled: 0, waitlisted: 1, planned: 2, event: 3 };
   const items = [...S.schedule].sort((a, b) =>
@@ -959,8 +1232,13 @@ function renderListView() {
     const sec = chosenSection(it);
     const full = sec && (sec.seats_avail || 0) <= 0;
 
-    const act = '<button class="btn btn-sm" data-a="remove" data-id="' + it.item_id + '">Remove</button>'
-      + '<button class="btn btn-sm" data-a="change" data-id="' + it.item_id + '">Change</button>';
+    /* Same reasoning as the calendar-view buttons (WCAG 4.1.2): the
+       table gives some context via cell position, but a disambiguating
+       aria-label costs nothing and helps anyone navigating by "jump to
+       next button" rather than reading row by row. */
+    const rowCode = esc(itemCode(it));
+    const act = '<button class="btn btn-sm" data-a="remove" data-id="' + it.item_id + '" aria-label="Remove ' + rowCode + '">Remove</button>'
+      + '<button class="btn btn-sm" data-a="change" data-id="' + it.item_id + '" aria-label="Change ' + rowCode + '">Change</button>';
 
     html += '<tr class="' + cls + '">'
       + '<td class="l"><b>' + esc(itemCode(it)) + "</b></td>"
@@ -1070,8 +1348,16 @@ function blockClass(st) {
 function calBlockHtml(it, m, conflict, heightPx, topPx, lane) {
   const cls = "cal-block" + blockClass(it.status) + (conflict ? " conflict" : "")
     + (heightPx < BLOCK_FULL_PX ? " compact" : "");
-  const btns = '<button class="btn btn-sm" data-a="remove" data-id="' + it.item_id + '">Remove</button>'
-    + '<button class="btn btn-sm" data-a="change" data-id="' + it.item_id + '">Change</button>';
+  /* aria-label on each — WCAG 2.4.6 Headings and Labels / 4.1.2. A
+     calendar full of "Remove" / "Change" buttons with no other
+     distinguishing text is exactly the situation where a screen-reader
+     user's "list all buttons on this page" shortcut becomes useless —
+     every entry reads the same. Folding the course code into the label
+     ("Remove CSE 100 from schedule") makes each one unique out of
+     context, without changing what's visibly printed on the button. */
+  const code = esc(itemCode(it));
+  const btns = '<button class="btn btn-sm" data-a="remove" data-id="' + it.item_id + '" aria-label="Remove ' + code + ' from schedule">Remove</button>'
+    + '<button class="btn btn-sm" data-a="change" data-id="' + it.item_id + '" aria-label="Change ' + code + '">Change</button>';
   /* conflicting blocks overlap with a cascade offset, like real WebReg (D-p16) */
   const laneCss = lane && lane.n > 1
     ? "left:calc(" + (lane.i * 16) + "% + 2px);right:calc(" + ((lane.n - 1 - lane.i) * 16)
@@ -1261,7 +1547,14 @@ function setDorm(name) {
 }
 function dormControlHtml() {
   const cur = localStorage.getItem("webreg_dorm") || "";
-  return '<div class="map-controls"><span class="mc-label">🏠 Where do you live?</span>'
+  /* label -> for="dorm-select" (WCAG 1.3.1/4.1.2 — was a <span> with no
+     "for" attribute, so the select's accessible name was blank). The
+     🏠 emoji is decorative flourish on top of real text, not a
+     substitute for it, so it's left alone rather than escaped out —
+     screen readers generally either skip emoji or read "house," neither
+     of which loses information here since "Where do you live?" already
+     says the same thing in words right next to it. */
+  return '<div class="map-controls"><label class="mc-label" for="dorm-select">🏠 Where do you live?</label>'
     + '<select id="dorm-select"><option value="">Not on campus / skip</option>'
     + DORMS.map(d => '<option value="' + esc(d.name) + '"'
         + (d.name === cur ? " selected" : "") + ">" + esc(d.name) + "</option>").join("")
@@ -1473,17 +1766,62 @@ function escHtml(s) { return esc(s); }
 
 /* ================================================================ modals */
 
+/* remembers what had focus before a modal opened, so closeModal() can
+   give it back — WCAG 2.4.3 Focus Order. Without this, closing a dialog
+   drops keyboard focus back to <body>, and a keyboard user has to
+   re-tab from the top of the page to find where they were. */
+let lastFocusedBeforeModal = null;
+
 function openModal(innerHtml) {
   const root = $("#modal-root");
+  lastFocusedBeforeModal = document.activeElement;
   root.innerHTML = '<div class="modal-box"><div class="modal-title"></div>'
     + '<div class="modal-body">' + innerHtml + "</div></div>";
   root.hidden = false;
+
+  /* Every modal variant titles itself a little differently (.modal-h for
+     the confirm/change/event dialogs, .hd inside .result-green/.result-red
+     for success/error/warning ones). Whichever is present becomes the
+     dialog's accessible name via aria-labelledby (WCAG 4.1.2 Name, Role,
+     Value) — a screen reader announces that text immediately on opening
+     the dialog, instead of "dialog" with no name, or the first row of
+     an unrelated confirmation table. */
+  const heading = $(".modal-h, .hd", root) || $(".modal-body", root);
+  if (heading) { heading.id = "modal-title-text"; root.setAttribute("aria-labelledby", "modal-title-text"); }
+
+  /* Move focus into the dialog (first focusable control, falling back to
+     the dialog itself) — WCAG 2.4.3 Focus Order. Without this, focus
+     stays on the button the user just clicked, which is now sitting
+     underneath the dialog that just covered it. */
+  const focusables = $all(
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled])',
+    root
+  );
+  (focusables[0] || root).focus();
+
+  document.addEventListener("keydown", modalKeyHandler);
   return root;
 }
+
+function modalKeyHandler(e) {
+  const root = $("#modal-root");
+  if (!root || root.hidden) return;
+  if (e.key === "Escape") { e.preventDefault(); closeModal(); return; }
+  if (e.key === "Tab") trapFocus(root, e);
+}
+
 function closeModal() {
   const root = $("#modal-root");
   root.hidden = true;
   root.innerHTML = "";
+  document.removeEventListener("keydown", modalKeyHandler);
+  /* Return focus to whatever opened the dialog (WCAG 2.4.3 Focus Order).
+     Guard against the trigger having disappeared from the DOM (e.g. a
+     "Plan" button whose whole results table just re-rendered). */
+  if (lastFocusedBeforeModal && document.contains(lastFocusedBeforeModal)) {
+    lastFocusedBeforeModal.focus();
+  }
+  lastFocusedBeforeModal = null;
 }
 
 /* ---------------- appointment times */
@@ -1577,7 +1915,7 @@ function evTimeOptionsHtml(cur) {
 
 function evErrHtml(msg) {
   return '<div class="result-red" style="margin-top:10px"><div class="hd">'
-    + '<span class="warn-tri"></span>' + esc(msg) + "</div></div>";
+    + '<span class="warn-tri" aria-hidden="true"></span>' + esc(msg) + "</div></div>";
 }
 
 function openEventModal(existing) {
@@ -1601,7 +1939,13 @@ function openEventModal(existing) {
     + '<td><input type="text" id="ev-loc" maxlength="40" value="' + esc(ev ? (ev.location || "") : "")
     + '" placeholder="e.g., Geisel Library"></td></tr>'
     + "</tbody></table>"
-    + '<div id="m-err"></div>'
+    /* role="alert" (implicit aria-live="assertive") — this is where
+       "give this event a name," "no seats available," etc. get filled
+       in after Confirm. It starts empty so there's nothing to announce
+       on open, but once JS fills it in, an alert region announces
+       itself automatically without needing a separate announce() call
+       — WCAG 4.1.3 Status Messages. */
+    + '<div id="m-err" role="alert"></div>'
     + '<div class="modal-btns"><button class="btn" id="m-cancel">Cancel</button>'
     + '<button class="btn" id="m-confirm">' + (ev ? "Confirm" : "Add Event") + "</button></div>");
   $("#m-cancel").addEventListener("click", closeModal);
@@ -1647,7 +1991,7 @@ function openEventModal(existing) {
 function openEventRemove(it) {
   const m = it.meetings[0];
   openModal(
-    '<div class="result-red"><div class="hd"><span class="warn-tri"></span>'
+    '<div class="result-red"><div class="hd"><span class="warn-tri" aria-hidden="true"></span>'
     + "You are about to remove this event.</div>"
     + "<b>Remove &ldquo;" + esc(it.title) + "&rdquo; (" + esc(m.days) + " "
     + timeRange(m) + ") from your schedule?</b></div>"
@@ -1699,15 +2043,17 @@ function confirmTableHtml(codeText, title, meetings, unitsText, opts) {
     rows += "<tr><td>" + esc(m.section_code) + "</td><td>" + typeName(m) + "</td>"
       + "<td>" + orTBA(m.days) + "</td><td>" + timeRange(m) + "</td></tr>";
   }
-  return '<table class="confirm-table"><thead><tr><th>Subject/Course</th>'
-    + "<th>Course Title</th><th>Grading</th><th>Units</th><th>Section Code</th>"
-    + "<th>Meeting Type</th><th>Days</th><th>Time</th></tr></thead><tbody>"
+  /* scope="col" on this confirmation table too — WCAG 1.3.1, same
+     reasoning as the section/list tables above. */
+  return '<table class="confirm-table"><thead><tr><th scope="col">Subject/Course</th>'
+    + '<th scope="col">Course Title</th><th scope="col">Grading</th><th scope="col">Units</th><th scope="col">Section Code</th>'
+    + '<th scope="col">Meeting Type</th><th scope="col">Days</th><th scope="col">Time</th></tr></thead><tbody>'
     + rows + "</tbody></table>";
 }
 
 function conflictAlertHtml(pairs, candidateCode) {
   if (!pairs.length) return "";
-  return '<div class="alert-yellow"><div class="hd"><span class="warn-tri yellow"></span>Alert:</div>'
+  return '<div class="alert-yellow"><div class="hd"><span class="warn-tri yellow" aria-hidden="true"></span>Alert:</div>'
     + '<div class="red">Warning: You have scheduling conflict!</div><ul>'
     + pairs.map(p => "<li>" + esc(candidateCode + (p[1] ? " Final" : "") + " and "
       + p[0] + (p[1] ? " Final" : "")) + "</li>").join("")
@@ -1729,7 +2075,13 @@ function openConfirm(mode, course, unit) {
     '<div class="modal-h">' + CONFIRM_TITLES[mode] + "</div>"
     + conflictAlertHtml(pairs, code)
     + confirmTableHtml(code, course.title, meetings, course.units)
-    + '<div id="m-err"></div>'
+    /* role="alert" (implicit aria-live="assertive") — this is where
+       "give this event a name," "no seats available," etc. get filled
+       in after Confirm. It starts empty so there's nothing to announce
+       on open, but once JS fills it in, an alert region announces
+       itself automatically without needing a separate announce() call
+       — WCAG 4.1.3 Status Messages. */
+    + '<div id="m-err" role="alert"></div>'
     + '<div class="modal-btns"><button class="btn" id="m-cancel">Cancel</button>'
     + '<button class="btn" id="m-confirm">Confirm</button></div>');
   $("#m-cancel").addEventListener("click", closeModal);
@@ -1761,7 +2113,7 @@ function addSuccessMessage(mode, code, grade, units, sectionId) {
 
 function showSuccess(message) {
   openModal(
-    '<div class="result-green"><div class="hd"><span class="ok-circ">&#10003;</span>Request Successful</div>'
+    '<div class="result-green"><div class="hd"><span class="ok-circ" aria-hidden="true">&#10003;</span>Request Successful</div>'
     + esc(message) + "</div>"
     + '<div class="modal-btns"><button class="btn" id="m-close">Close</button></div>');
   $("#m-close").addEventListener("click", closeModal);
@@ -1771,7 +2123,7 @@ function showModalError(e, mode, course, unit) {
   const err = $("#m-err");
   const full = unit && unit.sec && (unit.sec.seats_avail || 0) <= 0 && mode === "enroll";
   let html = '<div class="result-red" style="margin-top:12px"><div class="hd">'
-    + '<span class="warn-tri"></span>Request Failed</div>' + esc(e.message || "Request failed.");
+    + '<span class="warn-tri" aria-hidden="true"></span>Request Failed</div>' + esc(e.message || "Request failed.");
   if (full) {
     html += '<div style="margin-top:8px">This section is full. You may add yourself to the '
       + 'wait-list instead.</div><div style="margin-top:6px"><button class="btn" id="m-to-wl">'
@@ -1791,11 +2143,11 @@ function openDrop(it, isRemove) {
   const code = itemCode(it);
   const meetings = itemWeeklyMeetings(it);
   const warn = isRemove
-    ? '<div class="result-red"><div class="hd"><span class="warn-tri"></span>'
+    ? '<div class="result-red"><div class="hd"><span class="warn-tri" aria-hidden="true"></span>'
       + "You are about to remove this planned class.</div>"
       + "<b>You will remove all components of this class from your plan.</b><br>"
       + "<b>Are you sure you would like to remove this class?</b></div>"
-    : '<div class="result-red"><div class="hd"><span class="warn-tri"></span>'
+    : '<div class="result-red"><div class="hd"><span class="warn-tri" aria-hidden="true"></span>'
       + "You are about to drop this class.</div>"
       + "<b>Warning</b>: Academic regulations permit only one 'W' per-course.<br><br>"
       + "If this is your second attempt, WebReg will prohibit the drop.<br><br>"
@@ -1874,9 +2226,10 @@ async function openChange(it) {
   const meetings = itemWeeklyMeetings(it);
   openModal(
     '<div class="modal-h">Confirm class, and/or grading option or units to change</div>'
-    + '<table class="confirm-table"><thead><tr><th>Subject/Course</th><th>Course Title</th>'
-    + "<th>Grading</th><th>Units</th><th>Section Code</th><th>Meeting Type</th><th>Days</th>"
-    + "<th>Time</th></tr></thead><tbody>"
+    /* same scope="col" fix — WCAG 1.3.1 */
+    + '<table class="confirm-table"><thead><tr><th scope="col">Subject/Course</th><th scope="col">Course Title</th>'
+    + '<th scope="col">Grading</th><th scope="col">Units</th><th scope="col">Section Code</th><th scope="col">Meeting Type</th><th scope="col">Days</th>'
+    + '<th scope="col">Time</th></tr></thead><tbody>'
     + '<tr><td rowspan="' + meetings.length + '">' + esc(code) + "</td>"
     + '<td rowspan="' + meetings.length + '">' + esc(it.title) + "</td>"
     + '<td rowspan="' + meetings.length + '"><select id="m-grading">'
@@ -1890,7 +2243,13 @@ async function openChange(it) {
       + esc(m.meeting_type) + "</td><td>" + orTBA(m.days) + "</td><td>" + timeRange(m) + "</td></tr>").join("")
     + "</tbody></table>"
     + secSelect
-    + '<div id="m-err"></div>'
+    /* role="alert" (implicit aria-live="assertive") — this is where
+       "give this event a name," "no seats available," etc. get filled
+       in after Confirm. It starts empty so there's nothing to announce
+       on open, but once JS fills it in, an alert region announces
+       itself automatically without needing a separate announce() call
+       — WCAG 4.1.3 Status Messages. */
+    + '<div id="m-err" role="alert"></div>'
     + '<div class="modal-btns"><button class="btn" id="m-cancel">Cancel</button>'
     + '<button class="btn" id="m-confirm">Confirm</button></div>');
   $("#m-cancel").addEventListener("click", closeModal);
@@ -1936,7 +2295,13 @@ function openUpgrade(it, mode) {
     + conflictAlertHtml(pairs, code)
     + confirmTableHtml(code, it.title, meetings, String(it.units),
       { plainUnits: false })
-    + '<div id="m-err"></div>'
+    /* role="alert" (implicit aria-live="assertive") — this is where
+       "give this event a name," "no seats available," etc. get filled
+       in after Confirm. It starts empty so there's nothing to announce
+       on open, but once JS fills it in, an alert region announces
+       itself automatically without needing a separate announce() call
+       — WCAG 4.1.3 Status Messages. */
+    + '<div id="m-err" role="alert"></div>'
     + '<div class="modal-btns"><button class="btn" id="m-cancel">Cancel</button>'
     + '<button class="btn" id="m-confirm">Confirm</button></div>');
   const g = $("#m-grading");

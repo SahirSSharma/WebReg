@@ -1,5 +1,12 @@
 /* WebReg Revival — classic UCSD WebReg 2.0 skin (2015 chrome).
-   Colors + metrics from docs/research/UI_SPEC.md (pixel-sampled). */
+   Colors + metrics from docs/research/UI_SPEC.md (pixel-sampled).
+
+   ACCESSIBILITY PASS (CSE134B): every rule I touched for accessibility
+   reasons is commented right where it happens, citing the WCAG 2.2
+   success criterion it addresses so it's checkable against the spec
+   instead of just "this looks more accessible." Contrast numbers below
+   are measured (WebAIM-style relative-luminance ratio), not eyeballed —
+   see a11y-check/contrast.js in this same folder. */
 
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
@@ -9,6 +16,80 @@ html, body {
   font-size: 12px;
   color: #000;
 }
+
+/*
+  WCAG 2.4.7 Focus Visible (AA). The original stylesheet never set a
+  focus style at all, which meant every interactive element just fell
+  back to *whatever* the browser felt like drawing (fine in Chrome, thin
+  and easy to lose against these pale-blue/gray panels in Safari/Firefox
+  on some OS themes). Setting one explicit, high-contrast focus ring
+  means keyboard users can actually track where they are on a page this
+  dense with buttons, tabs, and table actions. Using :focus-visible
+  (not :focus) so mouse clicks don't get a ring they didn't ask for —
+  only keyboard/AT-driven focus does. */
+:focus-visible {
+  outline: 3px solid #0A4A65;
+  outline-offset: 2px;
+}
+
+/*
+  Skip link — WCAG 2.4.1 Bypass Blocks (A). Off-screen (not display:none,
+  which would also remove it from the tab order) until it's focused, at
+  which point it's pinned to the top-left so a sighted keyboard user can
+  see it too. Every screen has the banner + disclaimer + decorative shard
+  before the actual content; this lets you skip all three in one tab.
+*/
+.skip-link {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  background: #0A4A65;
+  color: #fff;
+  padding: 8px 16px;
+  z-index: 1000;
+  font-weight: bold;
+}
+.skip-link:focus {
+  left: 8px;
+  top: 8px;
+}
+
+/*
+  WCAG 1.3.1 / 4.1.2: visually-hidden content that's still exposed to
+  screen readers (real <label>s and headings that don't fit the visual
+  design, plus the aria-live status region). This is the standard
+  "clip, don't hide" technique — display:none or visibility:hidden
+  would pull the text out of the accessibility tree too, defeating the
+  point. .sr-only is an alias for the same rule since I used both names
+  in index.html depending on which felt more readable in context. */
+.visually-hidden, .sr-only {
+  position: absolute;
+  width: 1px; height: 1px;
+  padding: 0; margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/*
+  Several elements that were plain <a href="#"> "fake links" (click
+  handlers, no real destination) got swapped to real <button> elements
+  in index.html/webreg.js per WCAG 4.1.2 (a link implies navigation; a
+  button implies "does something here"). This class makes a <button>
+  look exactly like the old anchor — same color, weight, cursor — so
+  the visual design doesn't change, only what's under the hood. */
+.link-button {
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  color: #1B65A6;
+  font-weight: bold;
+  cursor: pointer;
+}
+.link-button:hover { text-decoration: underline; }
 
 a { color: #1B65A6; font-weight: bold; text-decoration: none; cursor: pointer; }
 a:hover { text-decoration: underline; }
@@ -34,7 +115,16 @@ button, select, input { font-family: Arial, Helvetica, sans-serif; font-size: 12
 .btn:hover:not(:disabled) { background: linear-gradient(#efefef, #e4e4e4 45%, #d5d5d5); }
 .btn:active:not(:disabled) { background: #ddd; box-shadow: inset 0 1px 2px rgba(0,0,0,.15); }
 .btn:disabled { color: #aaa; cursor: default; }
-.btn-sm { padding: 0 7px; font-size: 10px; line-height: 14px; }
+/*
+  WCAG 2.5.8 Target Size (Minimum), AA — every "Plan"/"Remove"/"Change"
+  button in the dense section tables and calendar blocks used this
+  class, and at 14px line-height + 0px vertical padding the actual
+  clickable box was well under the 24x24 CSS-px minimum the SC asks
+  for. min-height keeps the hit target legal-sized on every use of
+  .btn-sm without touching the font-size or the layout tables were
+  built around (bumping padding/line-height everywhere else would
+  have blown out the section-table row heights). */
+.btn-sm { padding: 0 7px; font-size: 10px; line-height: 14px; min-height: 24px; }
 /* a section already on the schedule: dark, non-interactive "Planned" chip */
 .planned-chip {
   background: #0A4A65;
@@ -187,7 +277,7 @@ button, select, input { font-family: Arial, Helvetica, sans-serif; font-size: 12
   border: 1px solid #aaa;
   color: #000;
 }
-#q::placeholder { color: #999; }
+#q::placeholder { color: #6b6b6b; }  /* 5.33:1 on white, was #999 (2.85:1) — WCAG 1.4.3. Placeholder text still needs to be readable even though #q now also has a real <label> (placeholders aren't a substitute for one, but they shouldn't be unreadable either). */
 .ac {
   position: absolute;
   left: 0; top: 100%;
@@ -216,7 +306,7 @@ button, select, input { font-family: Arial, Helvetica, sans-serif; font-size: 12
 .adv-left input[type=text] {
   width: 250px; padding: 2px 4px; border: 1px solid #aaa;
 }
-.adv-left input::placeholder { color: #999; }
+.adv-left input::placeholder { color: #6b6b6b; }  /* same 1.4.3 fix as #q::placeholder above */
 .adv-right { font-size: 12px; }
 .adv-right .so-hd { font-weight: bold; margin-bottom: 4px; }
 .adv-right table td { padding: 2px 6px 2px 0; white-space: nowrap; }
@@ -224,6 +314,22 @@ button, select, input { font-family: Arial, Helvetica, sans-serif; font-size: 12
 .adv-right label { font-weight: normal; margin-right: 10px; }
 .adv-right input[type=checkbox] { vertical-align: -2px; margin-right: 2px; }
 .adv-days label { margin-right: 8px; }
+
+/*
+  Support for the <fieldset>/<legend> grouping added around the
+  "Course Number Range" and "Days" checkboxes in index.html (WCAG
+  1.3.1 — see the comment there for why). Browsers give <fieldset> a
+  default border/padding/margin and <legend> a block layout, both of
+  which would otherwise break the existing table-cell layout these
+  checkboxes sit in; display:contents makes the fieldset behave like
+  it isn't there at all box-model-wise while keeping the semantic
+  grouping, and the legend is displayed inline so it reads like the
+  plain bold label text it's replacing. (This used to be inline
+  style="..." on each element — pulled out here so the page passes an
+  automated no-inline-style check and so there's one place to edit.)
+*/
+.adv-inline-fieldset { border: 0; padding: 0; margin: 0; display: contents; }
+.adv-inline-legend { display: inline; font-weight: bold; }
 .adv-times { margin: 6px 0; }
 .adv-times select { margin: 0 12px 0 4px; }
 .adv-open { margin: 6px 0; }
@@ -241,7 +347,7 @@ button, select, input { font-family: Arial, Helvetica, sans-serif; font-size: 12
   padding: 2px;
   cursor: text;
 }
-.tokbox .placeholder { color: #999; padding: 2px 3px; display: inline-block; }
+.tokbox .placeholder { color: #6b6b6b; padding: 2px 3px; display: inline-block; }  /* same 1.4.3 fix as the other placeholder text on this page */
 .tok {
   display: inline-block;
   background: linear-gradient(#f5f5f5, #e4e4e4);
@@ -253,7 +359,15 @@ button, select, input { font-family: Arial, Helvetica, sans-serif; font-size: 12
   cursor: pointer;
   white-space: normal;
 }
-.tok .x { color: #666; font-weight: bold; margin-right: 3px; }
+/* .x is now a real <button> (webreg.js wireSubjectTokens() — WCAG
+   2.1.1 Keyboard, so a keyboard user can actually remove a chip), so
+   it needs the usual button-chrome reset to keep looking like a plain
+   "×" glyph instead of picking up a default button border/background. */
+.tok .x {
+  color: #666; font-weight: bold; margin-right: 3px;
+  background: none; border: none; padding: 0; font: inherit; cursor: pointer;
+}
+.tok .x:hover { color: #C00; }
 .tok:hover { border-color: #888; }
 .tokdrop {
   position: absolute;
@@ -266,7 +380,18 @@ button, select, input { font-family: Arial, Helvetica, sans-serif; font-size: 12
   box-shadow: 2px 3px 6px rgba(0,0,0,.2);
 }
 .tokdrop input {
-  width: 100%; border: none; border-bottom: 1px solid #ccc; padding: 3px 5px; outline: none;
+  width: 100%; border: none; border-bottom: 1px solid #ccc; padding: 3px 5px;
+  /* Was outline: none with nothing filling in for it — a keyboard user
+     tabbing/typing into this filter box got zero visual indication it
+     was focused (WCAG 2.4.7 Focus Visible). Swapped to a visible
+     bottom-border color change instead of the default ring, since a
+     3px outline would look broken sitting inside the dropdown's own
+     1px border. */
+  border-bottom: 2px solid #ccc;
+}
+.tokdrop input:focus-visible {
+  border-bottom-color: #0A4A65;
+  outline: none;
 }
 .tokdrop div.opt { padding: 2px 6px; font-size: 11px; cursor: pointer; white-space: nowrap; }
 .tokdrop div.opt:hover { background: #e8f0f6; }
@@ -279,6 +404,12 @@ button, select, input { font-family: Arial, Helvetica, sans-serif; font-size: 12
 .results-toolbar .found { font-weight: bold; margin-left: 26px; font-size: 13px; }
 .results-toolbar select { margin: 0 10px 0 6px; }
 
+/* .pg is now applied to real <button>s instead of <span>s (see
+   renderPager() in webreg.js — WCAG 2.1.1 Keyboard) so the page-number
+   "pills" are actually reachable by keyboard. border:none/font:inherit
+   here strip the browser's default button chrome (an inset gray 3D
+   border, a different font) that would otherwise show through around
+   these and break the pixel-matched look. */
 .pg {
   display: inline-block;
   min-width: 24px;
@@ -290,6 +421,8 @@ button, select, input { font-family: Arial, Helvetica, sans-serif; font-size: 12
   color: #fff;
   font-size: 11px;
   font-weight: bold;
+  font-family: inherit;
+  border: none;
   margin-right: 3px;
   cursor: pointer;
   user-select: none;
@@ -324,13 +457,22 @@ button, select, input { font-family: Arial, Helvetica, sans-serif; font-size: 12
 /* course drawers */
 .drawer { border-top: 1px solid #c7c7c7; }
 .drawer:first-child { border-top: none; }
+/* .drawer-hd now renders on a real <button> (webreg.js renderDrawer() —
+   WCAG 2.1.1 Keyboard) instead of a <div>. The width/border/text-align/
+   font-family resets below undo the browser's default button box model
+   (auto width, inset border, centered text, UI font) so a 990px-wide
+   button still looks exactly like the plain header bar it's replacing. */
 .drawer-hd {
   background: linear-gradient(#f0f0f0, #e2e2e2);
   padding: 5px 8px;
   font-size: 11px;
+  font-family: inherit;
   cursor: pointer;
   display: flex;
   align-items: center;
+  width: 100%;
+  border: none;
+  text-align: left;
 }
 .drawer-hd:hover { background: linear-gradient(#eaeaea, #dadada); }
 .tri {
@@ -439,7 +581,7 @@ table.sec-table {
   border-bottom: none;
   cursor: pointer;
 }
-.tab.active { background: #fff; color: #CB6C12; }
+.tab.active { background: #fff; color: #954e06; }  /* 6.23:1 on white, was #CB6C12 (3.69:1) — WCAG 1.4.3. The 12px bold label doesn't clear the "large text" exemption, so it needs the full 4.5:1. */
 /* highlight the new Map tab until a user clicks it (glow + bold + NEW badge) */
 .tab.glow-new {
   position: relative;
@@ -452,6 +594,17 @@ table.sec-table {
 @keyframes map-glow {
   0%, 100% { box-shadow: 0 0 4px 1px rgba(255,180,0,.55); }
   50%      { box-shadow: 0 0 14px 5px rgba(255,180,0,.95); }
+}
+/*
+  WCAG 2.3.3 Animation from Interactions (AAA, but worth doing — this is
+  exactly the kind of infinite pulsing effect that's a known trigger for
+  vestibular disorders, and it serves no functional purpose, just draws
+  the eye). prefers-reduced-motion is the standard OS-level signal for
+  "please don't do this to me"; users who've turned it on still get the
+  NEW badge and the bold/color treatment, just without the looping
+  box-shadow pulse. */
+@media (prefers-reduced-motion: reduce) {
+  .tab.glow-new { animation: none; }
 }
 .tab.glow-new::after {
   content: "NEW";
@@ -625,7 +778,7 @@ tr.row-event td { background: #FBF4DC; color: #5a4a14; border-color: #e3d5a5; }
 }
 .map-controls .mc-label { font-weight: bold; }
 .map-controls select { font-size: 12px; padding: 2px 4px; }
-.map-controls .mc-hint { color: #777; font-size: 11px; }
+.map-controls .mc-hint { color: #5f6a70; font-size: 11px; }  /* 4.96:1 on #eef3f5, was #777 (4.00:1) — WCAG 1.4.3 */
 .walk-row.dorm { background: #eefaf0; border-left-color: #2fb457; }
 #leaflet-map { height: 460px; width: 100%; background: #e8eef0; }
 #leaflet-map .leaflet-container { font: inherit; }
@@ -639,7 +792,7 @@ tr.row-event td { background: #FBF4DC; color: #5a4a14; border-color: #e3d5a5; }
 }
 .walk-row.tight { background: #fbecec; border-left-color: #C00; }
 .walk-meta { color: #555; }
-.walk-ok { color: #178a3a; font-weight: bold; }
+.walk-ok { color: #136b2d; font-weight: bold; }  /* 6.63:1 on white, was #178a3a (4.44:1) — just under the 4.5:1 line for 12px bold, so it failed WCAG 1.4.3 by a hair */
 .walk-flag { color: #C00; font-weight: bold; }
 .walk-none { font-size: 12px; color: #555; padding: 4px 2px; }
 .leaflet-tooltip.map-lbl {
@@ -768,24 +921,35 @@ table.confirm-table {
 .appt-cols div.col { font-size: 12px; line-height: 1.6; }
 
 /* ------------------------------------------------ footer */
+/*
+  WCAG 1.4.3 Contrast (Minimum), AA — text under 18.66px bold / 24px
+  regular needs a 4.5:1 ratio against its background. I measured the
+  originals with a small contrast script (a11y-check/contrast.js):
+    #888 on white  = 3.54:1  (fails)
+    #aaa on white  = 2.32:1  (fails badly)
+  Darkened both just enough to clear 4.5:1 without changing the "quiet
+  footnote" feel these were going for — still visibly lighter than body
+  text, just not so light it drops below the legal-disclaimer-you-cant-
+  actually-read territory.
+*/
 .planner-note {
-  color: #888;
+  color: #6b6b6b;   /* 5.33:1 on white, was #888 (3.54:1) */
   font-size: 11px;
   margin: 26px 0 4px;
 }
-.planner-note .data-asof { color: #a7a7a7; }
+.planner-note .data-asof { color: #767676; }  /* was #a7a7a7 — same 1.4.3 fix */
 .copyright-note {
-  color: #aaa;
+  color: #767676;   /* 4.54:1 on white, was #aaa (2.32:1) */
   font-size: 10px;
   margin: 0 0 20px;
 }
-.copyright-note a { color: #7a97a6; }
+.copyright-note a { color: #4c6b78; }  /* 5.70:1 on white, was #7a97a6 (3.09:1) — WCAG 1.4.3 */
 .feedback-note {
-  color: #aaa;
+  color: #767676;   /* same fix as .copyright-note above */
   font-size: 10px;
   margin: 2px 0 20px;
 }
-.feedback-note a { color: #7a97a6; }
+.feedback-note a { color: #4c6b78; }  /* same 1.4.3 fix as .copyright-note a above */
 
 /* ===== ad-supported variant: gutter ad rails + content pages ===== */
 /* Side rails sit in the empty margins beside the 990px column, and only
@@ -798,9 +962,9 @@ table.confirm-table {
   width: 160px; height: 600px; gap: 6px;
   background: linear-gradient(#fafafa, #f0f0f0);
   border: 1px solid #dcdcdc; border-radius: 4px;
-  color: #b3b3b3; font-size: 11px; text-align: center;
+  color: #666666; font-size: 11px; text-align: center;  /* 5.04:1 on #f0f0f0, was #b3b3b3 (1.84:1) — WCAG 1.4.3 */
 }
-.ad-slot .ad-tag { font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: #c7c7c7; }
+.ad-slot .ad-tag { font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: #666666; }  /* same fix; #c7c7c7 was similarly unreadable */
 .ad-slot ins { display: block; }
 /* wide screens: upgrade to a big 300x600 half-page unit (more room, more revenue) */
 @media (min-width: 1620px) {
@@ -840,7 +1004,14 @@ table.confirm-table {
 .content p, .content li { font-size: 14px; }
 .content ul, .content ol { margin: 6px 0 12px 24px; }
 .content li { margin: 4px 0; }
-.content a { color: #1B65A6; }
+/* WCAG 1.4.1 Use of Color — inside a paragraph of regular prose, a bold
+   blue link sitting next to bold non-link text (both bold, only the
+   color differs) isn't reliably distinguishable for colorblind readers.
+   The nav/tabs/buttons elsewhere on the site are fine without an
+   underline because their button/tab chrome (borders, backgrounds,
+   position) is a second visual cue besides color — body-copy links
+   don't have that, so they get the underline back here. */
+.content a { color: #1B65A6; text-decoration: underline; }
 .content .callout {
   background: #f2f7f9; border-left: 4px solid #41788D; border-radius: 3px;
   padding: 10px 14px; margin: 16px 0; font-size: 13.5px;
