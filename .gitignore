@@ -17,3 +17,9 @@ site/about.html
 site/privacy.html
 site/terms.html
 tss/profile/
+
+# Claude Code session trail (local, feeds /recap)
+.claude/session-log.jsonl
+.claude/.keep-going-*
+
+PROGRESS.md
