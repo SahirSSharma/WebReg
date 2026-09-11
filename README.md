@@ -1,8 +1,8 @@
 # WebReg Course Planner
 
-UCSD's classic **WebReg**, brought back as a class-planning tool — for everyone who misses it now that TSS is the only option. It looks and works like the WebReg you know, loaded with **real Fall 2026 courses, professors, times, rooms, and total seat counts**.
+UCSD's original **WebReg**, remade! For everyone who misses it now that TSS is the only option. It looks and works like the WebReg you know, loaded with **real Fall 2026 courses, professors, times, rooms, and total seat counts**.
 
-## **https://sahirssharma.github.io/WebReg-Course-Planner/**
+## **https://sahirssharma.github.io/WebReg/**
 
 Just open the link. It runs entirely in your browser, and your planned schedule is saved privately on your own device.
 
